@@ -1,0 +1,16 @@
+[
+  {
+    "id": "usr_demo_1001",
+    "fullName": "Dr. Julian Vance",
+    "email": "demo@agrivision.ai",
+    "passwordHash": "93ce2306279d4a3dcec6805270aed0cbc1869946d1d04d40d43c7d476934f011",
+    "createdAt": "2026-09-05T21:25:56.633Z",
+    "trialStartDate": "2026-09-05T21:25:56.633Z",
+    "trialEndDate": "2026-09-12T21:25:56.633Z",
+    "subscriptionStatus": "cancelled",
+    "subscriptionPlan": "none",
+    "currentPeriodEnd": "2026-10-06T22:12:47.701Z",
+    "paymentHistory": [],
+    "paypalSubscriptionId": "I-TEST-SUB-99"
+  }
+]

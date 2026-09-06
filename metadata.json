@@ -1,0 +1,6 @@
+{
+  "name": "AGRICULTURE & FOOD SYSTEM",
+  "description": "A unified computer vision platform for agriculture and food systems featuring crop monitoring, pest detection, food quality inspection, and A2A judge diagnostics.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
