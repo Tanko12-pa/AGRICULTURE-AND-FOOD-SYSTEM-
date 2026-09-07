@@ -34,9 +34,11 @@ import {
   cancelSubscription,
   simulateTrialAction,
   calculateTrialRemaining,
+  fetchCurrentUser,
   BillingConfig,
 } from '../services/authService';
 import { PayPalSubscriptionButton } from './PayPalSubscriptionButton';
+import { AdminSubscriptionAnalyticsView } from './AdminSubscriptionAnalyticsView';
 
 interface SubscriptionBillingViewProps {
   currentUser: AuthUser | null;
@@ -79,8 +81,8 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
-  // Active view section tab
-  const [activeSection, setActiveSection] = useState<'plans' | 'account' | 'history'>('plans');
+  // Active view section tab: 'plans' | 'account' | 'history' | 'admin'
+  const [activeSection, setActiveSection] = useState<'plans' | 'account' | 'history' | 'admin'>('plans');
 
   // Load billing config on mount
   useEffect(() => {
@@ -97,11 +99,77 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
     }
   }, [statusMessage]);
 
-  // Pre-fill demo credentials
+  // Quick 1-click Demo Login for effortless testing
+  const handleQuickDemoLogin = async () => {
+    setIsLoading(true);
+    setStatusMessage(null);
+    const res = await signInUser('demo@agrivision.ai', 'Password123!');
+    setIsLoading(false);
+    if (res.success && res.user) {
+      onUserChange(res.user);
+      setStatusMessage({ type: 'success', text: `Signed in as ${res.user.fullName}. You can now complete your subscription.` });
+    } else {
+      setStatusMessage({ type: 'error', text: res.error || 'Failed to sign in demo account.' });
+    }
+  };
+
+  // Pre-fill demo credentials in sign-in form
   const handleFillDemo = () => {
     setSignInEmail('demo@agrivision.ai');
     setSignInPassword('Password123!');
   };
+
+  // Plan Selection with smooth scroll to PayPal checkout
+  const handleSelectPlanAndProceed = (plan: 'monthly' | 'yearly') => {
+    setSelectedPlan(plan);
+    setTimeout(() => {
+      const container = document.getElementById('subscription-container');
+      if (container) {
+        container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
+  };
+
+  // Add click listeners to custom plan selection cards/buttons (.plan-option)
+  useEffect(() => {
+    const handleOptionClick = (e: Event) => {
+      const target = e.currentTarget as HTMLElement;
+      const planVal = target.dataset.plan as 'monthly' | 'yearly' | undefined;
+      if (planVal === 'monthly' || planVal === 'yearly') {
+        // Remove active style from all, add to clicked
+        document.querySelectorAll('.plan-option').forEach(b => b.classList.remove('active'));
+        target.classList.add('active');
+        setSelectedPlan(planVal);
+      }
+    };
+
+    const buttons = document.querySelectorAll('.plan-option');
+    buttons.forEach(button => {
+      button.addEventListener('click', handleOptionClick);
+    });
+
+    return () => {
+      buttons.forEach(button => {
+        button.removeEventListener('click', handleOptionClick);
+      });
+    };
+  }, []);
+
+  // Synchronize DOM classes and radio states whenever selectedPlan updates
+  useEffect(() => {
+    document.querySelectorAll('.plan-option').forEach(b => {
+      const el = b as HTMLElement;
+      if (el.dataset.plan === selectedPlan) {
+        el.classList.add('active');
+      } else {
+        el.classList.remove('active');
+      }
+    });
+    const radio = document.querySelector(`input[name="plan"][value="${selectedPlan}"]`) as HTMLInputElement | null;
+    if (radio) {
+      radio.checked = true;
+    }
+  }, [selectedPlan]);
 
   // 1. SIGN UP HANDLER
   const handleSignUp = async (e: React.FormEvent) => {
@@ -207,10 +275,11 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
 
   // 6. PAYPAL PAYMENT CAPTURE HANDLER
   const handlePayPalSuccess = async (paymentDetails: any) => {
+    const planToCapture: 'monthly' | 'yearly' = paymentDetails?.plan || selectedPlan;
     setIsLoading(true);
     const res = await capturePayPalSubscription(
-      selectedPlan,
-      paymentDetails.id,
+      planToCapture,
+      paymentDetails?.id,
       paymentDetails,
       currentUser?.email
     );
@@ -220,7 +289,7 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
       onUserChange(res.user);
       setStatusMessage({
         type: 'success',
-        text: `PayPal Payment Confirmed! Your ${selectedPlan === 'yearly' ? 'Yearly ($199.99/yr)' : 'Monthly ($19.99/mo)'} subscription is active with uninterrupted application access.`,
+        text: `PayPal Payment Confirmed! Your ${planToCapture === 'yearly' ? 'Yearly ($199.99/yr)' : 'Monthly ($19.99/mo)'} subscription is active with uninterrupted application access.`,
       });
     } else {
       setStatusMessage({ type: 'error', text: res.error || 'Failed to activate subscription with payment.' });
@@ -415,6 +484,22 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
             <FileText className="w-4 h-4" />
             <span>Billing History & Invoices</span>
           </button>
+
+          <button
+            id="tab-admin-subscriptions"
+            onClick={() => setActiveSection('admin')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
+              activeSection === 'admin'
+                ? 'bg-[#1B4332] text-white border-[#1B4332] shadow-sm ring-1 ring-emerald-500'
+                : 'bg-emerald-50/70 text-emerald-900 border-emerald-200 hover:bg-emerald-100/80'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Admin Analytics & Firestore</span>
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-white text-emerald-800 border border-emerald-300">
+              ADMIN ONLY
+            </span>
+          </button>
         </div>
       </div>
 
@@ -530,9 +615,16 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
               <button
                 onClick={() => handleSimulate('activate-paid', 'monthly')}
                 className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-medium cursor-pointer"
-                title="Instantly activate paid monthly subscription"
+                title="Instantly simulate activating paid monthly subscription ($19.99/mo)"
               >
-                Activate Paid
+                Simulate Monthly ($19.99)
+              </button>
+              <button
+                onClick={() => handleSimulate('activate-paid', 'yearly')}
+                className="px-2.5 py-1 rounded-lg bg-[#1B4332] text-white hover:bg-black font-medium cursor-pointer"
+                title="Instantly simulate activating paid yearly subscription ($199.99/yr)"
+              >
+                Simulate Yearly ($199.99)
               </button>
             </div>
           </div>
@@ -556,22 +648,18 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
             {/* Monthly vs Yearly Toggle */}
             <div className="flex items-center gap-1.5 p-1 rounded-xl bg-gray-100 border border-gray-200/60 self-start sm:self-auto">
               <button
+                type="button"
+                data-plan="monthly"
                 onClick={() => setSelectedPlan('monthly')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  selectedPlan === 'monthly'
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
+                className={`plan-option ${selectedPlan === 'monthly' ? 'active bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'} px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer`}
               >
                 Monthly Billing
               </button>
               <button
+                type="button"
+                data-plan="yearly"
                 onClick={() => setSelectedPlan('yearly')}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
-                  selectedPlan === 'yearly'
-                    ? 'bg-[#1B4332] text-white shadow-sm'
-                    : 'text-gray-500 hover:text-gray-800'
-                }`}
+                className={`plan-option ${selectedPlan === 'yearly' ? 'active bg-[#1B4332] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'} px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer`}
               >
                 <span>Yearly Billing</span>
                 <span className="px-1.5 py-0.2 rounded bg-amber-400 text-gray-900 text-[10px] font-black">
@@ -585,11 +673,13 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* MONTHLY PLAN CARD */}
             <div
-              className={`p-6 rounded-2xl bg-white border transition-all shadow-sm relative flex flex-col justify-between ${
+              data-plan="monthly"
+              onClick={() => handleSelectPlanAndProceed('monthly')}
+              className={`plan-option ${
                 selectedPlan === 'monthly'
-                  ? 'border-[#1B4332] ring-2 ring-[#1B4332]/20'
+                  ? 'active border-[#1B4332] ring-2 ring-[#1B4332]/20'
                   : 'border-gray-200/80 hover:border-gray-300'
-              }`}
+              } p-6 rounded-2xl bg-white border transition-all shadow-sm relative flex flex-col justify-between cursor-pointer`}
             >
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -641,12 +731,16 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
               <div className="mt-6 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setSelectedPlan('monthly')}
-                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+                  data-plan="monthly"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectPlanAndProceed('monthly');
+                  }}
+                  className={`plan-option ${
                     selectedPlan === 'monthly'
-                      ? 'bg-[#1B4332] text-white shadow-sm'
+                      ? 'active bg-[#1B4332] text-white shadow-sm'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  } w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer`}
                 >
                   {selectedPlan === 'monthly' ? 'Proceed with Monthly Plan ($19.99)' : 'Select Monthly Plan'}
                 </button>
@@ -655,11 +749,13 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
 
             {/* YEARLY PLAN CARD */}
             <div
-              className={`p-6 rounded-2xl bg-white border transition-all shadow-sm relative flex flex-col justify-between ${
+              data-plan="yearly"
+              onClick={() => handleSelectPlanAndProceed('yearly')}
+              className={`plan-option ${
                 selectedPlan === 'yearly'
-                  ? 'border-[#1B4332] ring-2 ring-[#1B4332]/20 bg-gradient-to-b from-white to-[#F8FAF9]'
+                  ? 'active border-[#1B4332] ring-2 ring-[#1B4332]/20 bg-gradient-to-b from-white to-[#F8FAF9]'
                   : 'border-gray-200/80 hover:border-gray-300'
-              }`}
+              } p-6 rounded-2xl bg-white border transition-all shadow-sm relative flex flex-col justify-between cursor-pointer`}
             >
               {/* Value Badge */}
               <div className="absolute -top-3 right-6 px-3 py-1 rounded-full bg-[#1B4332] text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
@@ -716,12 +812,16 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
               <div className="mt-6 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setSelectedPlan('yearly')}
-                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all ${
+                  data-plan="yearly"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectPlanAndProceed('yearly');
+                  }}
+                  className={`plan-option ${
                     selectedPlan === 'yearly'
-                      ? 'bg-[#1B4332] text-white shadow-sm'
+                      ? 'active bg-[#1B4332] text-white shadow-sm'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  } w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer`}
                 >
                   {selectedPlan === 'yearly' ? 'Proceed with Yearly Plan ($199.99)' : 'Select Yearly Plan'}
                 </button>
@@ -784,11 +884,12 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      data-plan="monthly"
+                      className={`plan-option ${
                         selectedPlan === 'monthly'
-                          ? 'bg-white border-[#1B4332] ring-2 ring-[#1B4332]/20 shadow-sm'
+                          ? 'active bg-white border-[#1B4332] ring-2 ring-[#1B4332]/20 shadow-sm'
                           : 'bg-white/60 border-gray-200 hover:bg-white'
-                      }`}
+                      } flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all`}
                     >
                       <input
                         type="radio"
@@ -805,11 +906,12 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
                     </label>
 
                     <label
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      data-plan="yearly"
+                      className={`plan-option ${
                         selectedPlan === 'yearly'
-                          ? 'bg-white border-[#1B4332] ring-2 ring-[#1B4332]/20 shadow-sm'
+                          ? 'active bg-white border-[#1B4332] ring-2 ring-[#1B4332]/20 shadow-sm'
                           : 'bg-white/60 border-gray-200 hover:bg-white'
-                      }`}
+                      } flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all`}
                     >
                       <input
                         type="radio"
@@ -866,24 +968,34 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
                     Your PayPal subscription must be linked to your authenticated Agri-Vision account so your 7-day trial and paid access remain synchronized.
                   </p>
                 </div>
-                <div className="flex items-center justify-center gap-2 pt-1">
+                <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
                   <button
-                    onClick={() => {
-                      setAuthMode('signup');
-                      setActiveSection('account');
-                    }}
-                    className="px-4 py-2 rounded-xl bg-[#1B4332] text-white text-xs font-bold hover:bg-black transition-all"
+                    type="button"
+                    onClick={handleQuickDemoLogin}
+                    disabled={isLoading}
+                    className="px-4 py-2 rounded-xl bg-[#1B4332] text-white text-xs font-bold hover:bg-black transition-all cursor-pointer shadow-sm disabled:opacity-50"
                   >
-                    Create Account (Sign Up)
+                    Quick Continue as Demo Agronomist (1-Click)
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       setAuthMode('signin');
                       setActiveSection('account');
                     }}
-                    className="px-4 py-2 rounded-xl bg-white border border-gray-300 text-gray-800 text-xs font-bold hover:bg-gray-50 transition-all"
+                    className="px-4 py-2 rounded-xl bg-white border border-gray-300 text-gray-800 text-xs font-bold hover:bg-gray-50 transition-all cursor-pointer"
                   >
                     Sign In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('signup');
+                      setActiveSection('account');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white border border-gray-300 text-gray-700 text-xs font-bold hover:bg-gray-50 transition-all cursor-pointer"
+                  >
+                    Create Account (Sign Up)
                   </button>
                 </div>
               </div>
@@ -1290,6 +1402,19 @@ export const SubscriptionBillingView: React.FC<SubscriptionBillingViewProps> = (
             </div>
           )}
         </div>
+      )}
+
+      {/* SECTION 4: SECURE ADMIN ANALYTICS & FIRESTORE AGGREGATION VIEW */}
+      {activeSection === 'admin' && (
+        <AdminSubscriptionAnalyticsView
+          currentUser={currentUser}
+          onRefreshUser={async () => {
+            const freshUser = await fetchCurrentUser();
+            if (freshUser) {
+              onUserChange(freshUser);
+            }
+          }}
+        />
       )}
     </div>
   );

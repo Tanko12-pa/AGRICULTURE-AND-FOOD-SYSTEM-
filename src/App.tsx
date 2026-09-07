@@ -477,6 +477,7 @@ export default function App() {
           <NotificationCenter
             notifications={notifications}
             onDismiss={handleDismissNotification}
+            onBulkDismiss={handleBatchClearNotifications}
             isOpen={isNotificationCenterOpen}
             onToggle={() => setIsNotificationCenterOpen(!isNotificationCenterOpen)}
             onOpenChatWithPrompt={handleOpenChatWithPrompt}
@@ -625,6 +626,7 @@ export default function App() {
               <NotificationCenter
                 notifications={notifications}
                 onDismiss={handleDismissNotification}
+                onBulkDismiss={handleBatchClearNotifications}
                 isOpen={isNotificationCenterOpen}
                 onToggle={() => setIsNotificationCenterOpen(!isNotificationCenterOpen)}
                 onOpenChatWithPrompt={handleOpenChatWithPrompt}

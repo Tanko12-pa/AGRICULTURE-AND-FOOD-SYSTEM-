@@ -21,11 +21,188 @@ import {
   Clock,
   Send,
   Eye,
+  HardDrive,
+  Database,
+  Wifi,
 } from 'lucide-react';
 import { CachedFieldObservation, SyncAuditLogItem } from '../types';
 
 const STORAGE_KEY_OBSERVATIONS = 'agri_cached_field_observations_v1';
 const STORAGE_KEY_SYNC_LOG = 'agri_sync_audit_log_v1';
+export const STORAGE_KEY_MAP_TILES = 'agri_cached_map_tiles_v1';
+export const STORAGE_KEY_LAST_VIEWED_TILE = 'agri_last_viewed_tile_v1';
+export const STORAGE_KEY_OFFLINE_SIM = 'agri_offline_sim_mode_v1';
+
+export interface CachedMapTile {
+  id: string; // e.g. "Zone-A_ndvi"
+  zoneId: string;
+  zoneName: string;
+  crop: string;
+  layer: 'ndvi' | 'rgb' | 'thermal';
+  dataUrl: string;
+  cachedAt: string;
+  sizeKb: number;
+  coords: string;
+  ndvi: number;
+}
+
+export const ZONES = [
+  {
+    id: 'Zone-A',
+    name: 'North Soybean Parcel (42 ha)',
+    crop: 'Soybean V4',
+    health: '94% Optimal',
+    ndvi: 0.82,
+    moisture: '68%',
+    weedInfest: '2.4% (Low)',
+    coords: '41.8781° N, 87.6298° W',
+  },
+  {
+    id: 'Zone-B',
+    name: 'South Maize Valley (68 ha)',
+    crop: 'Yellow Dent Maize',
+    health: '88% Fair',
+    ndvi: 0.74,
+    moisture: '54% (Irrigating)',
+    weedInfest: '8.1% (Moderate)',
+    coords: '41.8712° N, 87.6350° W',
+  },
+  {
+    id: 'Zone-C',
+    name: 'Orchard & High-Tunnel (18 ha)',
+    crop: 'Honeycrisp Apples & Tomatoes',
+    health: '98% Superior',
+    ndvi: 0.91,
+    moisture: '72%',
+    weedInfest: '0.8% (Negligible)',
+    coords: '41.8830° N, 87.6210° W',
+  },
+];
+
+/**
+ * Procedural Map Tile Synthesizer for LocalStorage Offline Field Caching.
+ * Generates an optimized, crisp orthomosaic / multispectral canvas tile
+ * representing the farm parcel that can be stored and retrieved directly from LocalStorage.
+ */
+export const synthesizeMapTile = (
+  zoneId: string,
+  layer: 'ndvi' | 'rgb' | 'thermal'
+): CachedMapTile => {
+  const zone = ZONES.find((z) => z.id === zoneId) || ZONES[0];
+  const canvas = document.createElement('canvas');
+  canvas.width = 800;
+  canvas.height = 500;
+  const ctx = canvas.getContext('2d');
+
+  if (ctx) {
+    // 1. Dark field soil base
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, 800, 500);
+
+    // 2. Field furrows with orientation matching zone
+    const furrowAngle = zoneId === 'Zone-A' ? -0.22 : zoneId === 'Zone-B' ? 0.28 : 0.05;
+    ctx.save();
+    ctx.translate(400, 250);
+    ctx.rotate(furrowAngle);
+    ctx.translate(-400, -250);
+
+    for (let x = -200; x < 1000; x += 22) {
+      if (layer === 'ndvi') {
+        // Multispectral NDVI palette (dark emerald 0.85+ to vibrant green to amber/yellow)
+        const wave = Math.sin(x * 0.03 + (zoneId === 'Zone-A' ? 1.5 : 4.0));
+        ctx.fillStyle =
+          wave > 0.4 ? '#065f46' : wave > 0 ? '#10b981' : wave > -0.4 ? '#eab308' : '#b45309';
+      } else if (layer === 'thermal') {
+        // Thermal IR temperature palette (cool blues in furrows to warm amber/red on dry soil)
+        const wave = Math.cos(x * 0.04);
+        ctx.fillStyle =
+          wave > 0.35 ? '#1e3a8a' : wave > 0 ? '#0284c7' : wave > -0.3 ? '#f59e0b' : '#dc2626';
+      } else {
+        // True RGB natural crop canopy
+        const wave = Math.sin(x * 0.035);
+        ctx.fillStyle =
+          wave > 0.15 ? '#15803d' : wave > -0.2 ? '#166534' : '#854d0e';
+      }
+      ctx.fillRect(x, -200, 16, 900);
+    }
+    ctx.restore();
+
+    // 3. Grid lines & parcel contouring
+    ctx.strokeStyle =
+      layer === 'ndvi'
+        ? 'rgba(52, 211, 153, 0.35)'
+        : layer === 'thermal'
+        ? 'rgba(251, 191, 36, 0.35)'
+        : 'rgba(163, 230, 53, 0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 8]);
+    for (let gx = 100; gx < 800; gx += 150) {
+      ctx.beginPath();
+      ctx.moveTo(gx, 0);
+      ctx.lineTo(gx, 500);
+      ctx.stroke();
+    }
+    for (let gy = 80; gy < 500; gy += 120) {
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      ctx.lineTo(800, gy);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // 4. Parcel Boundary Highlight Box
+    ctx.strokeStyle =
+      layer === 'ndvi' ? '#34d399' : layer === 'thermal' ? '#fbbf24' : '#a3e635';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(30, 30, 740, 440);
+
+    // 5. Watermark / GIS Metadata Badge in Tile
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    ctx.fillRect(40, 40, 420, 56);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeRect(40, 40, 420, 56);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px ui-monospace, monospace';
+    ctx.fillText(`LOCAL STORAGE CACHED TILE: ${zone.name}`, 52, 62);
+    ctx.fillStyle = '#34d399';
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.fillText(
+      `Layer: ${layer.toUpperCase()} • NDVI: ${zone.ndvi} • Crop: ${zone.crop}`,
+      52,
+      82
+    );
+
+    // 6. Bottom Right Offline Proof Stamp
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    ctx.fillRect(470, 415, 290, 45);
+    ctx.strokeStyle = 'rgba(52, 211, 153, 0.4)';
+    ctx.strokeRect(470, 415, 290, 45);
+
+    ctx.fillStyle = '#34d399';
+    ctx.font = 'bold 11px ui-monospace, monospace';
+    ctx.fillText('✓ STORED IN BROWSER LOCALSTORAGE', 482, 434);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '9px ui-monospace, monospace';
+    ctx.fillText(`GPS: ${zone.coords} • WGS84`, 482, 450);
+  }
+
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+  const sizeKb = Math.round(dataUrl.length / 1024);
+
+  return {
+    id: `${zoneId}_${layer}`,
+    zoneId,
+    zoneName: zone.name,
+    crop: zone.crop,
+    layer,
+    dataUrl,
+    cachedAt: new Date().toISOString(),
+    sizeKb,
+    coords: zone.coords,
+    ndvi: zone.ndvi,
+  };
+};
 
 const INITIAL_GEO_PINS: CachedFieldObservation[] = [
   {
@@ -70,8 +247,64 @@ const INITIAL_GEO_PINS: CachedFieldObservation[] = [
 
 export const OfflineMapView: React.FC = () => {
   const [isCached, setIsCached] = useState(true);
-  const [selectedZone, setSelectedZone] = useState('Zone-A');
-  const [mapLayer, setMapLayer] = useState<'ndvi' | 'rgb' | 'thermal'>('ndvi');
+
+  // LocalStorage Map Tile Caching Engine
+  const [cachedTiles, setCachedTiles] = useState<Record<string, CachedMapTile>>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_MAP_TILES);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Error reading cached map tiles from localStorage', e);
+    }
+    return {};
+  });
+
+  const [lastViewedTile, setLastViewedTile] = useState<CachedMapTile | null>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_LAST_VIEWED_TILE);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.warn('Error reading last viewed map tile from localStorage', e);
+    }
+    return null;
+  });
+
+  const [selectedZone, setSelectedZone] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_LAST_VIEWED_TILE);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.zoneId) return parsed.zoneId;
+      }
+    } catch (e) {}
+    return 'Zone-A';
+  });
+
+  const [mapLayer, setMapLayer] = useState<'ndvi' | 'rgb' | 'thermal'>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_LAST_VIEWED_TILE);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.layer) return parsed.layer;
+      }
+    } catch (e) {}
+    return 'ndvi';
+  });
+
+  const [isSimulatingOffline, setIsSimulatingOffline] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(STORAGE_KEY_OFFLINE_SIM) === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const [isCachingAll, setIsCachingAll] = useState(false);
+  const [showTileDrawer, setShowTileDrawer] = useState(false);
 
   // Stored Observations & Geo-pins
   const [observations, setObservations] = useState<CachedFieldObservation[]>(() => {
@@ -131,6 +364,32 @@ export const OfflineMapView: React.FC = () => {
     }
   }, [observations]);
 
+  // Automatic tile persistence to LocalStorage for the active zone/layer
+  useEffect(() => {
+    const tileKey = `${selectedZone}_${mapLayer}`;
+    let tileToStore = cachedTiles[tileKey];
+
+    if (!tileToStore) {
+      tileToStore = synthesizeMapTile(selectedZone, mapLayer);
+      setCachedTiles((prev) => {
+        const updated = { ...prev, [tileKey]: tileToStore };
+        try {
+          localStorage.setItem(STORAGE_KEY_MAP_TILES, JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Failed to persist map tiles to localStorage', e);
+        }
+        return updated;
+      });
+    }
+
+    setLastViewedTile(tileToStore);
+    try {
+      localStorage.setItem(STORAGE_KEY_LAST_VIEWED_TILE, JSON.stringify(tileToStore));
+    } catch (e) {
+      console.warn('Failed to save last viewed map tile to localStorage', e);
+    }
+  }, [selectedZone, mapLayer]);
+
   // Listen for sync/observation changes triggered from other components (like MobileDashboardView)
   useEffect(() => {
     const handleStorageChange = () => {
@@ -152,39 +411,7 @@ export const OfflineMapView: React.FC = () => {
     };
   }, []);
 
-  const zones = [
-    {
-      id: 'Zone-A',
-      name: 'North Soybean Parcel (42 ha)',
-      crop: 'Soybean V4',
-      health: '94% Optimal',
-      ndvi: 0.82,
-      moisture: '68%',
-      weedInfest: '2.4% (Low)',
-      coords: '41.8781° N, 87.6298° W',
-    },
-    {
-      id: 'Zone-B',
-      name: 'South Maize Valley (68 ha)',
-      crop: 'Yellow Dent Maize',
-      health: '88% Fair',
-      ndvi: 0.74,
-      moisture: '54% (Irrigating)',
-      weedInfest: '8.1% (Moderate)',
-      coords: '41.8712° N, 87.6350° W',
-    },
-    {
-      id: 'Zone-C',
-      name: 'Orchard & High-Tunnel (18 ha)',
-      crop: 'Honeycrisp Apples & Tomatoes',
-      health: '98% Superior',
-      ndvi: 0.91,
-      moisture: '72%',
-      weedInfest: '0.8% (Negligible)',
-      coords: '41.8830° N, 87.6210° W',
-    },
-  ];
-
+  const zones = ZONES;
   const activeZoneData = zones.find((z) => z.id === selectedZone) || zones[0];
 
   // Geocoordinate calculation based on map bounding box
@@ -450,6 +677,87 @@ export const OfflineMapView: React.FC = () => {
 
   const pendingCount = observations.filter((o) => o.syncStatus === 'pending').length;
 
+  const totalCachedTileKb = (Object.values(cachedTiles) as CachedMapTile[]).reduce(
+    (sum, t) => sum + (t.sizeKb || 0),
+    0
+  );
+  const cachedTileCount = Object.keys(cachedTiles).length;
+
+  const handleCacheAllTiles = () => {
+    setIsCachingAll(true);
+    setTimeout(() => {
+      try {
+        const allTiles: Record<string, CachedMapTile> = { ...cachedTiles };
+        const layers: Array<'ndvi' | 'rgb' | 'thermal'> = ['ndvi', 'rgb', 'thermal'];
+
+        for (const z of ZONES) {
+          for (const l of layers) {
+            const key = `${z.id}_${l}`;
+            allTiles[key] = synthesizeMapTile(z.id, l);
+          }
+        }
+
+        setCachedTiles(allTiles);
+        localStorage.setItem(STORAGE_KEY_MAP_TILES, JSON.stringify(allTiles));
+
+        const totalKb = (Object.values(allTiles) as CachedMapTile[]).reduce(
+          (sum, t) => sum + (t.sizeKb || 0),
+          0
+        );
+        const currentKey = `${selectedZone}_${mapLayer}`;
+        if (allTiles[currentKey]) {
+          setLastViewedTile(allTiles[currentKey]);
+          localStorage.setItem(STORAGE_KEY_LAST_VIEWED_TILE, JSON.stringify(allTiles[currentKey]));
+        }
+
+        setSyncFeedback({
+          type: 'success',
+          message: `Cached all 9 parcel tiles (${totalKb} KB) in LocalStorage for complete offline coverage!`,
+        });
+        setTimeout(() => setSyncFeedback(null), 5000);
+      } catch (err) {
+        setSyncFeedback({
+          type: 'error',
+          message: 'Failed to cache all tiles to LocalStorage (Storage quota exceeded).',
+        });
+      } finally {
+        setIsCachingAll(false);
+      }
+    }, 450);
+  };
+
+  const handleClearTileCache = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY_MAP_TILES);
+      localStorage.removeItem(STORAGE_KEY_LAST_VIEWED_TILE);
+      setCachedTiles({});
+      setLastViewedTile(null);
+      setSyncFeedback({
+        type: 'info',
+        message: 'Cleared all map tiles from browser LocalStorage.',
+      });
+      setTimeout(() => setSyncFeedback(null), 4000);
+    } catch (e) {
+      console.warn('Failed to clear tile cache', e);
+    }
+  };
+
+  const handleToggleOfflineSimulation = () => {
+    const nextVal = !isSimulatingOffline;
+    setIsSimulatingOffline(nextVal);
+    try {
+      localStorage.setItem(STORAGE_KEY_OFFLINE_SIM, String(nextVal));
+    } catch (e) {}
+
+    setSyncFeedback({
+      type: nextVal ? 'info' : 'success',
+      message: nextVal
+        ? 'Offline Mode ON: Network disabled. Map rendering 100% from LocalStorage tile cache.'
+        : 'Offline Mode OFF: Online mode restored.',
+    });
+    setTimeout(() => setSyncFeedback(null), 4000);
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner (High Density Theme) */}
@@ -459,8 +767,13 @@ export const OfflineMapView: React.FC = () => {
             <Compass className="w-6 h-6 text-[#1B4332]" />
             Offline Field GIS & Autonomous Drone Telemetry
           </h2>
-          <p className="text-xs text-gray-500 font-mono mt-1">
-            Long-Press on Map to Drop Geo-Located Field Pins • Offline Storage • Multispectral NDVI
+          <p className="text-xs text-gray-500 font-mono mt-1 flex items-center gap-2 flex-wrap">
+            <span>Long-Press on Map to Drop Geo-Located Field Pins</span>
+            <span>•</span>
+            <span className="text-[#1B4332] font-semibold flex items-center gap-1">
+              <HardDrive className="w-3.5 h-3.5" />
+              LocalStorage Tile Caching Active
+            </span>
           </p>
         </div>
 
@@ -485,16 +798,55 @@ export const OfflineMapView: React.FC = () => {
             </span>
           </button>
 
+          {/* Simulate Offline Mode Toggle */}
           <button
-            onClick={() => setIsCached(!isCached)}
-            className={`px-3 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 border transition-all ${
-              isCached
-                ? 'bg-[#F8FAF9] text-gray-800 border-gray-300 shadow-xs'
-                : 'bg-[#F1F3F0] text-gray-700 border-gray-200 hover:bg-gray-200'
+            id="toggle-offline-simulation-btn"
+            onClick={handleToggleOfflineSimulation}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 border transition-all shadow-xs ${
+              isSimulatingOffline
+                ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-amber-200'
+                : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
             }`}
+            title="Simulate offline field environment to verify local tile cache rendering"
           >
-            {isCached ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Download className="w-4 h-4" />}
-            <span>{isCached ? 'Offline Cache Active (52 MB)' : 'Download Offline Tiles'}</span>
+            {isSimulatingOffline ? (
+              <>
+                <WifiOff className="w-4 h-4 text-slate-950 animate-pulse" />
+                <span>Offline Mode (Active)</span>
+              </>
+            ) : (
+              <>
+                <Wifi className="w-4 h-4 text-emerald-600" />
+                <span>Simulate Offline</span>
+              </>
+            )}
+          </button>
+
+          {/* Cache All Tiles Button */}
+          <button
+            id="cache-all-tiles-btn"
+            onClick={handleCacheAllTiles}
+            disabled={isCachingAll}
+            className="px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-2 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100/80 text-[#1B4332] transition-all shadow-xs active:scale-95"
+            title="Pre-cache all 9 field parcel and spectral layer tiles to LocalStorage"
+          >
+            <HardDrive className={`w-4 h-4 text-[#1B4332] ${isCachingAll ? 'animate-spin' : ''}`} />
+            <span>
+              {isCachingAll
+                ? 'Caching Tiles...'
+                : `Cache All Tiles (${cachedTileCount}/9 • ${totalCachedTileKb} KB)`}
+            </span>
+          </button>
+
+          {/* Inspect Cached Tiles Drawer Button */}
+          <button
+            id="inspect-tile-cache-btn"
+            onClick={() => setShowTileDrawer(!showTileDrawer)}
+            className="px-3 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 transition-all shadow-xs"
+            title="Inspect all cached map tiles stored in browser LocalStorage"
+          >
+            <Database className="w-3.5 h-3.5 text-gray-500" />
+            <span>Tiles ({cachedTileCount})</span>
           </button>
         </div>
       </div>
@@ -565,15 +917,35 @@ export const OfflineMapView: React.FC = () => {
             onTouchCancel={cancelLongPress}
             className="relative rounded-2xl overflow-hidden border border-gray-200 bg-slate-950 aspect-[16/10] shadow-sm select-none cursor-crosshair"
           >
-            {/* Satellite Farm Imagery */}
+            {/* Map Imagery: Prioritize Cached Map Tile from LocalStorage */}
             <img
-              src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80"
-              alt="Farm Aerial Orthomosaic"
-              className="w-full h-full object-cover opacity-90 pointer-events-none"
+              src={
+                lastViewedTile?.dataUrl ||
+                "https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80"
+              }
+              alt={`Farm Field Tile ${selectedZone} (${mapLayer.toUpperCase()})`}
+              className="w-full h-full object-cover opacity-90 pointer-events-none select-none transition-opacity duration-300"
             />
 
+            {/* LocalStorage Cache Metadata Overlay Badge */}
+            <div className="absolute top-3 left-3 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-emerald-500/50 text-xs font-mono text-emerald-300 flex items-center gap-2 shadow-lg z-20 pointer-events-auto">
+              <HardDrive className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>
+                LocalStorage Tile: <strong className="text-white">{activeZoneData.id}</strong> ({mapLayer.toUpperCase()})
+                {lastViewedTile?.sizeKb ? ` • ${lastViewedTile.sizeKb} KB` : ''}
+              </span>
+            </div>
+
+            {/* Offline Simulation / Disconnected Mode Banner */}
+            {isSimulatingOffline && (
+              <div className="absolute top-12 left-3 bg-amber-500 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs font-mono shadow-xl z-20 flex items-center gap-2 animate-pulse pointer-events-auto">
+                <WifiOff className="w-4 h-4 shrink-0" />
+                <span>OFFLINE FIELD MODE: Rendering strictly from LocalStorage tile cache</span>
+              </div>
+            )}
+
             {/* Simulated False Color NDVI Overlay if selected */}
-            {mapLayer === 'ndvi' && (
+            {mapLayer === 'ndvi' && !lastViewedTile?.dataUrl && (
               <div className="absolute inset-0 bg-gradient-to-tr from-emerald-600/35 via-transparent to-amber-500/20 mix-blend-color-dodge pointer-events-none" />
             )}
 
@@ -1075,6 +1447,183 @@ export const OfflineMapView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* LocalStorage Cached Tiles Inspector Modal */}
+      {showTileDrawer && (
+        <div
+          id="cached-tiles-inspector-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+        >
+          <div className="w-full max-w-2xl bg-white rounded-2xl border border-gray-200 shadow-2xl p-6 text-gray-900 space-y-4 max-h-[85vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <HardDrive className="w-5 h-5 text-[#1B4332]" />
+                <div>
+                  <h3 className="text-base font-bold font-display text-gray-900">
+                    LocalStorage Map Tile Cache
+                  </h3>
+                  <p className="text-xs text-gray-500 font-mono">
+                    Offline orthomosaics stored in browser LocalStorage for field navigation
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTileDrawer(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Cache Summary Cards */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-[#F8FAF9] border border-gray-200/80">
+                <div className="text-[10px] font-mono uppercase text-gray-500 font-bold">
+                  Cached Tiles
+                </div>
+                <div className="text-lg font-bold font-mono text-[#1B4332] mt-0.5">
+                  {cachedTileCount} / 9
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#F8FAF9] border border-gray-200/80">
+                <div className="text-[10px] font-mono uppercase text-gray-500 font-bold">
+                  LocalStorage Used
+                </div>
+                <div className="text-lg font-bold font-mono text-emerald-700 mt-0.5">
+                  {totalCachedTileKb} KB
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#F8FAF9] border border-gray-200/80">
+                <div className="text-[10px] font-mono uppercase text-gray-500 font-bold">
+                  Last Viewed Tile
+                </div>
+                <div className="text-xs font-bold font-mono text-gray-800 mt-1 truncate">
+                  {lastViewedTile ? `${lastViewedTile.zoneId} (${lastViewedTile.layer.toUpperCase()})` : 'None'}
+                </div>
+              </div>
+            </div>
+
+            {/* List of Cached Tiles */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-mono text-gray-600 font-bold">
+                <span>Stored Tile Payloads</span>
+                <span>{cachedTileCount} cached</span>
+              </div>
+
+              {cachedTileCount === 0 ? (
+                <div className="py-8 text-center text-xs font-mono text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                  No tiles currently cached in LocalStorage. Click "Cache All 9 Tiles" below.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(Object.values(cachedTiles) as CachedMapTile[]).map((tile) => {
+                    const isCurrent =
+                      tile.zoneId === selectedZone && tile.layer === mapLayer;
+
+                    return (
+                      <div
+                        key={tile.id}
+                        className={`p-3 rounded-xl border text-xs flex gap-3 transition-all ${
+                          isCurrent
+                            ? 'border-emerald-500 bg-emerald-50/50 ring-1 ring-emerald-500'
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                      >
+                        {/* Thumbnail */}
+                        <div className="w-16 h-12 rounded-lg overflow-hidden border border-gray-300 bg-black shrink-0 relative">
+                          <img
+                            src={tile.dataUrl}
+                            alt={tile.id}
+                            className="w-full h-full object-cover"
+                          />
+                          {isCurrent && (
+                            <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-1 ring-black" />
+                          )}
+                        </div>
+
+                        {/* Details */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-gray-900 truncate">
+                              {tile.zoneName.split('(')[0]}
+                            </span>
+                            <span
+                              className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                tile.layer === 'ndvi'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : tile.layer === 'thermal'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {tile.layer.toUpperCase()}
+                            </span>
+                          </div>
+
+                          <div className="text-[10px] font-mono text-gray-500 mt-0.5 flex items-center justify-between">
+                            <span>{tile.sizeKb} KB</span>
+                            <span>{new Date(tile.cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+
+                          {!isCurrent ? (
+                            <button
+                              onClick={() => {
+                                setSelectedZone(tile.zoneId);
+                                setMapLayer(tile.layer);
+                                setShowTileDrawer(false);
+                              }}
+                              className="mt-1.5 text-[10px] font-bold text-[#1B4332] hover:underline flex items-center gap-1"
+                            >
+                              <span>Switch to this Tile →</span>
+                            </button>
+                          ) : (
+                            <span className="mt-1.5 text-[10px] font-mono text-emerald-700 font-bold block">
+                              ✓ Currently Active
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Actions Bar */}
+            <div className="pt-3 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleClearTileCache}
+                  disabled={cachedTileCount === 0}
+                  className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-mono font-bold flex items-center gap-1.5 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear Tile Cache</span>
+                </button>
+
+                <button
+                  onClick={handleCacheAllTiles}
+                  disabled={isCachingAll}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[#1B4332] hover:bg-emerald-100 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <HardDrive className={`w-3.5 h-3.5 ${isCachingAll ? 'animate-spin' : ''}`} />
+                  <span>{isCachingAll ? 'Caching...' : 'Cache All 9 Tiles'}</span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowTileDrawer(false)}
+                className="px-4 py-1.5 rounded-xl bg-[#1B4332] hover:bg-black text-white text-xs font-mono font-bold"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

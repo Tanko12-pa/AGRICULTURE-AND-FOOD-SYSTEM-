@@ -3,14 +3,71 @@
     "id": "usr_demo_1001",
     "fullName": "Dr. Julian Vance",
     "email": "demo@agrivision.ai",
+    "role": "AGRI_SUPERVISOR",
     "passwordHash": "93ce2306279d4a3dcec6805270aed0cbc1869946d1d04d40d43c7d476934f011",
-    "createdAt": "2026-09-05T21:25:56.633Z",
-    "trialStartDate": "2026-09-05T21:25:56.633Z",
-    "trialEndDate": "2026-09-12T21:25:56.633Z",
-    "subscriptionStatus": "cancelled",
-    "subscriptionPlan": "none",
-    "currentPeriodEnd": "2026-10-06T22:12:47.701Z",
-    "paymentHistory": [],
-    "paypalSubscriptionId": "I-TEST-SUB-99"
+    "createdAt": "2026-09-06T12:00:00.000Z",
+    "trialStartDate": "2026-09-06T12:00:00.000Z",
+    "trialEndDate": "2026-09-13T12:00:00.000Z",
+    "subscriptionStatus": "trialing",
+    "subscriptionPlan": "free_trial",
+    "currentPeriodEnd": "2026-09-13T12:00:00.000Z",
+    "paymentHistory": []
+  },
+  {
+    "id": "usr_owner_1002",
+    "fullName": "Lead Agronomist",
+    "email": "akindewum@gmail.com",
+    "role": "SYSTEM_ADMIN",
+    "passwordHash": "93ce2306279d4a3dcec6805270aed0cbc1869946d1d04d40d43c7d476934f011",
+    "createdAt": "2026-09-06T12:00:00.000Z",
+    "trialStartDate": "2026-09-06T12:00:00.000Z",
+    "trialEndDate": "2026-09-13T12:00:00.000Z",
+    "subscriptionStatus": "active",
+    "subscriptionPlan": "yearly",
+    "currentPeriodEnd": "2027-09-07T17:34:55.690Z",
+    "paymentHistory": [
+      {
+        "id": "tx_sale_1788797721810_lqj",
+        "date": "2026-09-07T16:15:21.810Z",
+        "amount": 19.99,
+        "currency": "USD",
+        "plan": "yearly",
+        "paymentMethod": "paypal",
+        "transactionId": "TX-SALE-TEST-1",
+        "status": "completed"
+      },
+      {
+        "id": "tx_sale_1788734988165_xx5",
+        "date": "2026-09-06T22:49:48.165Z",
+        "amount": 199.99,
+        "currency": "USD",
+        "plan": "yearly",
+        "paymentMethod": "paypal",
+        "transactionId": "SALE-999",
+        "status": "completed"
+      },
+      {
+        "id": "tx_1788734984457_ktj",
+        "date": "2026-09-06T22:49:44.457Z",
+        "amount": 199.99,
+        "currency": "USD",
+        "plan": "yearly",
+        "paymentMethod": "paypal",
+        "transactionId": "PP-TEST-YEARLY-002",
+        "status": "completed"
+      },
+      {
+        "id": "tx_1788734982302_2tk",
+        "date": "2026-09-06T22:49:42.302Z",
+        "amount": 19.99,
+        "currency": "USD",
+        "plan": "monthly",
+        "paymentMethod": "paypal",
+        "transactionId": "PP-TEST-MONTHLY-001",
+        "status": "completed"
+      }
+    ],
+    "paypalSubscriptionId": "I-TEST-MX1XUO",
+    "paypalPayerEmail": "akindewum@gmail.com"
   }
 ]

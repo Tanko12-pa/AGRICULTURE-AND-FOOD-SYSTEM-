@@ -373,6 +373,10 @@ export async function capturePayPalSubscription(
       return { success: false, error: data.error || 'Payment capture failed.' };
     }
 
+    if (data.token) {
+      setStoredToken(data.token);
+    }
+
     if (data.user) {
       setStoredUser(data.user);
       syncUserToFirestore(data.user).catch((e) => console.warn('Firestore sync error:', e));
@@ -507,4 +511,62 @@ export function hasActiveSubscriptionAccess(user: AuthUser | null): boolean {
   }
 
   return false;
+}
+
+export interface WebhookStatusInfo {
+  signatureVerificationEnabled: boolean;
+  clientSecretConfigured: boolean;
+  secretMasked: string;
+  supportedAlgorithms: string[];
+  webhookId: string;
+  paypalApiUrl: string;
+}
+
+export interface WebhookSimulationResult {
+  success: boolean;
+  simulatedEvent: any;
+  signatureGenerated: boolean;
+  signatureHeader: string;
+  verificationResult: {
+    verified: boolean;
+    status: string;
+    message: string;
+  };
+  databaseAction?: any;
+  error?: string;
+}
+
+export async function fetchWebhookStatus(): Promise<WebhookStatusInfo | null> {
+  try {
+    const res = await fetch('/api/paypal-webhook/status');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch webhook status:', err);
+  }
+  return null;
+}
+
+export async function simulateWebhookTest(options: {
+  eventType: string;
+  shouldSign: boolean;
+  targetEmail?: string;
+  planType?: 'monthly' | 'yearly';
+}): Promise<WebhookSimulationResult | null> {
+  try {
+    const res = await fetch('/api/paypal-webhook/simulate-test', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(options),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Webhook simulation error:', err);
+  }
+  return null;
 }
