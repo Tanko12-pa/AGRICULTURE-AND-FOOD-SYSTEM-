@@ -1,10 +1,1 @@
 @import "tailwindcss";
-
-.plan-option {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.plan-option.active {
-  border-color: #1B4332 !important;
-  box-shadow: 0 0 0 2px rgba(27, 67, 50, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}

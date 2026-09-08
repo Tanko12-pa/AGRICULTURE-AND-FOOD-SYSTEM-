@@ -20,61 +20,19 @@ export interface AuthUser {
   id: string;
   fullName: string;
   email: string;
-  role?: UserRole;
   createdAt: string;
   trialStartDate: string;
   trialEndDate: string;
+  trial_ends_at?: string | Date;
   subscriptionStatus: SubscriptionStatus;
+  subscription_status?: 'ACTIVE' | 'TRIALING' | 'EXPIRED' | 'CANCELLED' | string;
+  paypal_subscription_id?: string;
+  plan_id?: string;
   subscriptionPlan: SubscriptionPlanType;
   currentPeriodEnd: string;
   paypalSubscriptionId?: string;
   paypalPayerEmail?: string;
   paymentHistory: SubscriptionPaymentRecord[];
-}
-
-export interface FirestoreSubscriptionRecord {
-  id: string;
-  userId: string;
-  userEmail: string;
-  userName: string;
-  role?: UserRole;
-  plan: 'monthly' | 'yearly' | 'free_trial' | 'none';
-  status: 'active' | 'cancelled' | 'trialing' | 'expired';
-  paypalSubscriptionId?: string;
-  currentPeriodEnd?: string;
-  updatedAt: string;
-  amount?: number;
-  currency?: string;
-  source: 'users_col' | 'subscriptions_col';
-}
-
-export interface SubscriptionChartDataPoint {
-  name: string;
-  count: number;
-  revenue: number;
-  fill: string;
-  percentage?: number;
-}
-
-export interface AggregatedSubscriptionStats {
-  total: number;
-  activeCount: number;
-  cancelledCount: number;
-  trialingCount: number;
-  expiredCount: number;
-  monthlyActiveCount: number;
-  yearlyActiveCount: number;
-  monthlyCancelledCount: number;
-  yearlyCancelledCount: number;
-  mrr: number; // Monthly Recurring Revenue ($)
-  arr: number; // Annual Run Rate ($)
-  retentionRatePercent: number;
-  churnRatePercent: number;
-  records: FirestoreSubscriptionRecord[];
-  chartData?: SubscriptionChartDataPoint[];
-  firestoreConnected: boolean;
-  databaseId: string;
-  lastUpdated: string;
 }
 
 

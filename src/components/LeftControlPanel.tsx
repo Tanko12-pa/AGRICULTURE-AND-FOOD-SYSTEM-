@@ -22,6 +22,7 @@ import {
   Compass,
   Smartphone,
   CreditCard,
+  Trash2,
 } from 'lucide-react';
 import { ActiveTab, UserRole, AuthUser } from '../types';
 
@@ -43,6 +44,7 @@ interface LeftControlPanelProps {
   onExportReport: () => void;
   onResetData: () => void;
   onOpenSecurity?: () => void;
+  onOpenClearCache?: () => void;
   isAnalyzing: boolean;
   unreadAlertsCount: number;
 }
@@ -65,6 +67,7 @@ export const LeftControlPanel: React.FC<LeftControlPanelProps> = ({
   onExportReport,
   onResetData,
   onOpenSecurity,
+  onOpenClearCache,
   isAnalyzing,
   unreadAlertsCount,
 }) => {
@@ -476,6 +479,23 @@ export const LeftControlPanel: React.FC<LeftControlPanelProps> = ({
             <span>Reset Demo</span>
           </button>
         </div>
+
+        {/* Clear Cookies & Cache Button */}
+        {onOpenClearCache && (
+          <button
+            id="btn-clear-cache-cookies"
+            onClick={onOpenClearCache}
+            className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-950/40 hover:bg-amber-900/60 text-amber-200 border border-amber-800/60 transition-all group cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <Trash2 className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
+              Clear Cookies & Cache
+            </span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-900/80 text-amber-300 font-mono">
+              Purge
+            </span>
+          </button>
+        )}
       </div>
 
       {/* GEMINI ACTIVE WIDGET (Matching Design HTML Aside Footer) */}

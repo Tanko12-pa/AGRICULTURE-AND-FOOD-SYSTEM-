@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Leaf, Cpu, Sparkles, Activity, ShieldCheck, Radio, Clock, CreditCard } from 'lucide-react';
+import { Eye, Leaf, Cpu, Sparkles, Activity, ShieldCheck, Radio, Clock, CreditCard, Trash2 } from 'lucide-react';
 import { UserRole, AuthUser } from '../types';
 
 interface HeaderBannerProps {
@@ -8,6 +8,7 @@ interface HeaderBannerProps {
   activeTab: string;
   currentUser?: AuthUser | null;
   onNavigateToBilling?: () => void;
+  onOpenClearCache?: () => void;
 }
 
 export const HeaderBanner: React.FC<HeaderBannerProps> = ({
@@ -15,6 +16,7 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
   isOffline,
   currentUser,
   onNavigateToBilling,
+  onOpenClearCache,
 }) => {
   // Compute trial status if applicable
   const now = Date.now();
@@ -83,6 +85,19 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
               1 CRITICAL ALERT
             </span>
           )}
+
+          {onOpenClearCache && (
+            <button
+              id="btn-clean-cache-header"
+              onClick={onOpenClearCache}
+              title="Clear Cookies and Browser Cache"
+              className="px-2.5 py-1 rounded-lg text-xs font-medium text-gray-600 hover:text-red-700 bg-gray-100 hover:bg-red-50 border border-gray-200 hover:border-red-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-gray-500" />
+              <span className="hidden sm:inline">Clean Cache</span>
+            </button>
+          )}
+
           <span className="text-xs font-mono font-medium text-gray-400 hidden sm:inline">
             UTC {new Date().toISOString().substring(11, 19)}
           </span>

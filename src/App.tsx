@@ -35,6 +35,7 @@ import { OfflineMapView } from './components/OfflineMapView';
 import { AgronomistChatModal } from './components/AgronomistChatModal';
 import { LiveCameraModal } from './components/LiveCameraModal';
 import { SecurityMfaModal } from './components/SecurityMfaModal';
+import { ClearCacheModal } from './components/ClearCacheModal';
 import { NotificationCenter } from './components/NotificationCenter';
 import { PushNotificationToast } from './components/PushNotificationToast';
 import { VisionTelemetryToolbar } from './components/VisionTelemetryToolbar';
@@ -44,6 +45,7 @@ import {
   fetchCurrentUser,
   calculateTrialRemaining,
   hasActiveSubscriptionAccess,
+  checkAccess,
 } from './services/authService';
 import {
   Menu,
@@ -80,6 +82,7 @@ export default function App() {
   // Security & MFA
   const [mfaEnabled, setMfaEnabled] = useState(true);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [isClearCacheModalOpen, setIsClearCacheModalOpen] = useState(false);
 
   // Modals & Chat Context
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
@@ -103,13 +106,15 @@ export default function App() {
     });
   }, []);
 
-  // Subscription access guard helper
+  // Subscription access guard helper using checkAccess
   const requireSubscription = (actionName?: string): boolean => {
-    if (hasActiveSubscriptionAccess(currentUser)) {
+    if (checkAccess(currentUser)) {
       return true;
     }
+    // Block access and redirect to Payment Gateway
     setGateFeatureName(actionName || 'Computer Vision Inference');
     setIsSubscriptionGateOpen(true);
+    setActiveTab('billing');
     return false;
   };
 
@@ -477,7 +482,6 @@ export default function App() {
           <NotificationCenter
             notifications={notifications}
             onDismiss={handleDismissNotification}
-            onBulkDismiss={handleBatchClearNotifications}
             isOpen={isNotificationCenterOpen}
             onToggle={() => setIsNotificationCenterOpen(!isNotificationCenterOpen)}
             onOpenChatWithPrompt={handleOpenChatWithPrompt}
@@ -494,6 +498,19 @@ export default function App() {
         <LeftControlPanel
           activeTab={activeTab}
           setActiveTab={(tab) => {
+            if (tab !== 'billing' && tab !== 'overview' && !checkAccess(currentUser)) {
+              setGateFeatureName(
+                tab === 'crop' ? 'Crop Disease Diagnostics'
+                : tab === 'pest' ? 'YOLOv8 Pest Detection'
+                : tab === 'quality' ? 'Produce Quality Inspection'
+                : tab === 'drone' ? 'Autonomous Drone Telemetry'
+                : 'Advanced Vision Pipeline'
+              );
+              setIsSubscriptionGateOpen(true);
+              setActiveTab('billing'); // Block access and redirect to Payment Gateway
+              setIsMobilePanelOpen(false);
+              return;
+            }
             setActiveTab(tab);
             setIsMobilePanelOpen(false);
           }}
@@ -517,6 +534,7 @@ export default function App() {
           onExportReport={handleExportReport}
           onResetData={handleResetData}
           onOpenSecurity={() => setIsSecurityModalOpen(true)}
+          onOpenClearCache={() => setIsClearCacheModalOpen(true)}
           isAnalyzing={isAnalyzing}
           unreadAlertsCount={unreadAlertsCount}
           currentUser={currentUser}
@@ -540,10 +558,11 @@ export default function App() {
           activeTab={activeTab}
           currentUser={currentUser}
           onNavigateToBilling={() => setActiveTab('billing')}
+          onOpenClearCache={() => setIsClearCacheModalOpen(true)}
         />
 
         {/* Subscription & 7-Day Free Trial Notice Banner */}
-        {currentUser && currentUser.subscriptionStatus === 'trialing' && (
+        {currentUser && checkAccess(currentUser) && (currentUser.subscriptionStatus === 'trialing' || currentUser.subscription_status === 'TRIALING') && (
           <div className="bg-gradient-to-r from-blue-50/90 via-emerald-50/70 to-blue-50/90 border border-blue-200/80 rounded-2xl p-3.5 px-5 flex items-center justify-between flex-wrap gap-3 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -571,7 +590,7 @@ export default function App() {
           </div>
         )}
 
-        {currentUser && currentUser.subscriptionStatus === 'expired' && (
+        {currentUser && !checkAccess(currentUser) && (
           <div className="bg-gradient-to-r from-rose-50/90 via-amber-50/60 to-rose-50/90 border border-rose-200 rounded-2xl p-3.5 px-5 flex items-center justify-between flex-wrap gap-3 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -626,7 +645,6 @@ export default function App() {
               <NotificationCenter
                 notifications={notifications}
                 onDismiss={handleDismissNotification}
-                onBulkDismiss={handleBatchClearNotifications}
                 isOpen={isNotificationCenterOpen}
                 onToggle={() => setIsNotificationCenterOpen(!isNotificationCenterOpen)}
                 onOpenChatWithPrompt={handleOpenChatWithPrompt}
@@ -801,6 +819,15 @@ export default function App() {
         onChangeRole={(r) => setUserRole(r)}
         mfaEnabled={mfaEnabled}
         onToggleMfa={() => setMfaEnabled(!mfaEnabled)}
+      />
+
+      <ClearCacheModal
+        isOpen={isClearCacheModalOpen}
+        onClose={() => setIsClearCacheModalOpen(false)}
+        onPostClearReset={() => {
+          setCurrentUser(null);
+          handleResetData();
+        }}
       />
     </div>
   );

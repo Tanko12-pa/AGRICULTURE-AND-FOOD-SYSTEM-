@@ -5,7 +5,6 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 
 import { authAndBillingRouter } from './server/authAndBilling';
-import paypalSubscriptionRouter from './server/paypalSubscriptionRoute';
 
 dotenv.config();
 
@@ -18,7 +17,15 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // Mount Authentication & Billing API routes
 app.use('/api', authAndBillingRouter);
-app.use(paypalSubscriptionRouter);
+app.all(['/paypal/webhook', '/webhooks/paypal', '/billing/paypal-webhook'], (req, res, next) => {
+  req.url = '/paypal/webhook';
+  authAndBillingRouter(req, res, next);
+});
+
+// Root level aliases for Clear-Site-Data & Clear-Cache
+app.all(['/clear-site-data', '/clear-cache'], (req: Request, res: Response) => {
+  res.redirect(307, '/api/clear-site-data');
+});
 
 // Initialize Gemini Client using the official @google/genai SDK with User-Agent telemetry
 let ai: GoogleGenAI | null = null;

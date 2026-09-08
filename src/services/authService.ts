@@ -1,5 +1,4 @@
 import { AuthUser } from '../types';
-import { syncUserToFirestore, saveSubscriptionToFirestore } from '../firebase';
 
 const TOKEN_KEY = 'agri_vision_auth_token';
 const USER_KEY = 'agri_vision_auth_user';
@@ -17,15 +16,17 @@ export interface BillingPlanInfo {
 export interface BillingConfig {
   paypalClientId: string;
   paypalApiUrl?: string;
-  paypalProductId?: string;
-  paypalPlanIdMonthly?: string;
-  paypalPlanIdYearly?: string;
-  isSandbox?: boolean;
   isConfigured?: boolean;
+  isSandbox?: boolean;
   currency: string;
   plans: {
     monthly: BillingPlanInfo & { paypalPlanId?: string };
     yearly: BillingPlanInfo & { paypalPlanId?: string };
+  };
+  meta?: {
+    productId?: string | null;
+    webhookConfigured?: boolean;
+    environment?: 'sandbox' | 'production';
   };
 }
 
@@ -107,7 +108,6 @@ export async function signUpUser(
     }
     if (data.user) {
       setStoredUser(data.user);
-      syncUserToFirestore(data.user).catch((e) => console.warn('Firestore sync error:', e));
     }
 
     return {
@@ -142,7 +142,6 @@ export async function signInUser(
     }
     if (data.user) {
       setStoredUser(data.user);
-      syncUserToFirestore(data.user).catch((e) => console.warn('Firestore sync error:', e));
     }
 
     return {
@@ -258,14 +257,12 @@ export async function fetchBillingConfig(): Promise<BillingConfig> {
     if (data.success) {
       return {
         paypalClientId: data.paypalClientId || 'sb',
-        paypalApiUrl: data.paypalApiUrl || 'https://api-m.sandbox.paypal.com',
-        paypalProductId: data.paypalProductId || '',
-        paypalPlanIdMonthly: data.paypalPlanIdMonthly || '',
-        paypalPlanIdYearly: data.paypalPlanIdYearly || '',
-        isSandbox: Boolean(data.isSandbox),
+        paypalApiUrl: data.paypalApiUrl || 'https://api-m.paypal.com',
         isConfigured: Boolean(data.isConfigured),
+        isSandbox: Boolean(data.isSandbox),
         currency: data.currency || 'USD',
         plans: data.plans,
+        meta: data.meta,
       };
     }
   } catch (err) {
@@ -275,12 +272,9 @@ export async function fetchBillingConfig(): Promise<BillingConfig> {
   // Fallback defaults
   return {
     paypalClientId: 'sb',
-    paypalApiUrl: 'https://api-m.sandbox.paypal.com',
-    paypalProductId: '',
-    paypalPlanIdMonthly: '',
-    paypalPlanIdYearly: '',
-    isSandbox: true,
+    paypalApiUrl: 'https://api-m.paypal.com',
     isConfigured: false,
+    isSandbox: true,
     currency: 'USD',
     plans: {
       monthly: {
@@ -318,38 +312,6 @@ export async function fetchBillingConfig(): Promise<BillingConfig> {
   };
 }
 
-export async function createPayPalOrder(
-  plan: 'monthly' | 'yearly'
-): Promise<{ success: boolean; orderId?: string; price?: number; planName?: string; planId?: string; error?: string }> {
-  try {
-    const res = await fetch('/api/billing/create-order', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan }),
-    });
-    const data = await res.json();
-    return data;
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to create PayPal order' };
-  }
-}
-
-export async function createPayPalSubscription(
-  planType: 'monthly' | 'yearly'
-): Promise<{ subscriptionID?: string; planId?: string; status?: string; error?: string }> {
-  try {
-    const res = await fetch('/api/create-subscription', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planType }),
-    });
-    const data = await res.json();
-    return data;
-  } catch (err: any) {
-    return { error: err.message || 'Failed to initiate PayPal subscription' };
-  }
-}
-
 export async function capturePayPalSubscription(
   plan: 'monthly' | 'yearly',
   orderId?: string,
@@ -374,20 +336,11 @@ export async function capturePayPalSubscription(
     }
 
     if (data.token) {
-      setStoredToken(data.token);
+      localStorage.setItem('agri_auth_token', data.token);
     }
 
     if (data.user) {
       setStoredUser(data.user);
-      syncUserToFirestore(data.user).catch((e) => console.warn('Firestore sync error:', e));
-      if (orderId || paymentDetails?.id) {
-        saveSubscriptionToFirestore(data.user.id, {
-          subscriptionID: orderId || paymentDetails?.id || 'PP-SUB',
-          plan,
-          status: 'active',
-          orderId,
-        }).catch((e) => console.warn('Firestore save sub error:', e));
-      }
     }
 
     return {
@@ -397,6 +350,51 @@ export async function capturePayPalSubscription(
     };
   } catch (err: any) {
     return { success: false, error: err.message || 'Network error during payment verification.' };
+  }
+}
+
+export async function activatePayPalSubscriptionDirect(
+  subscriptionId: string,
+  planId: string,
+  userEmail?: string,
+  userName?: string
+): Promise<{ success: boolean; user?: AuthUser; message?: string; error?: string }> {
+  try {
+    const token = localStorage.getItem('agri_auth_token');
+    const res = await fetch('/api/subscriptions/activate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        subscriptionID: subscriptionId,
+        planId,
+        email: userEmail,
+        name: userName,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || 'Subscription activation failed.' };
+    }
+
+    if (data.token) {
+      localStorage.setItem('agri_auth_token', data.token);
+    }
+
+    if (data.user) {
+      setStoredUser(data.user);
+    }
+
+    return {
+      success: true,
+      user: data.user,
+      message: 'Subscription successfully activated!',
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error during subscription activation.' };
   }
 }
 
@@ -414,7 +412,6 @@ export async function cancelSubscription(): Promise<{ success: boolean; user?: A
 
     if (data.user) {
       setStoredUser(data.user);
-      syncUserToFirestore(data.user).catch((e) => console.warn('Firestore sync error:', e));
     }
 
     return {
@@ -497,76 +494,147 @@ export function calculateTrialRemaining(user: AuthUser | null): {
   };
 }
 
-export function hasActiveSubscriptionAccess(user: AuthUser | null): boolean {
+export function checkAccess(user: any): boolean {
   if (!user) return false;
+  const now = new Date();
 
-  if (user.subscriptionStatus === 'active') {
-    const periodEnd = new Date(user.currentPeriodEnd).getTime();
-    return Date.now() < periodEnd;
-  }
+  // Normalize subscription_status and trial_ends_at to support both exact snippet naming and existing schema
+  const status = (user.subscription_status || user.subscriptionStatus || '').toUpperCase();
+  const rawTrialEnd = user.trial_ends_at || user.trialEndDate;
+  const trialEndsAt = rawTrialEnd instanceof Date ? rawTrialEnd : (rawTrialEnd ? new Date(rawTrialEnd) : null);
 
-  if (user.subscriptionStatus === 'trialing') {
-    const trialEnd = new Date(user.trialEndDate).getTime();
-    return Date.now() < trialEnd;
-  }
+  // Grant access if trial is still active OR if subscription status is active
+  if (status === 'ACTIVE') return true;
+  if (status === 'TRIALING' && trialEndsAt && trialEndsAt > now) return true;
 
+  // Block access and redirect to Payment Gateway
   return false;
 }
 
-export interface WebhookStatusInfo {
-  signatureVerificationEnabled: boolean;
-  clientSecretConfigured: boolean;
-  secretMasked: string;
-  supportedAlgorithms: string[];
-  webhookId: string;
-  paypalApiUrl: string;
+export function hasActiveSubscriptionAccess(user: AuthUser | null | undefined): boolean {
+  return checkAccess(user);
 }
 
-export interface WebhookSimulationResult {
+export const DEFAULT_PAYPAL_CLIENT_ID = 'BAAIOmq3Kx_2Lo8oiG7L8JlzOuuAKT2E1V2cJaJka7wJ5afyYJRYJRhXzbX-KnAPEU19Hn4jdHf79ksIqo';
+export const PAYPAL_MONTHLY_PLAN_ID = 'P-3NN56131X8898472BNKOQFNQ';
+export const PAYPAL_YEARLY_PLAN_ID = 'P-7BJ4281497082825YNKOQJBI';
+
+export async function activatePayPalSubscription(
+  subscriptionID: string,
+  planId: string,
+  email?: string
+): Promise<{
   success: boolean;
-  simulatedEvent: any;
-  signatureGenerated: boolean;
-  signatureHeader: string;
-  verificationResult: {
-    verified: boolean;
-    status: string;
-    message: string;
-  };
-  databaseAction?: any;
+  message: string;
+  user?: AuthUser;
+  subscriptionID?: string;
   error?: string;
-}
-
-export async function fetchWebhookStatus(): Promise<WebhookStatusInfo | null> {
+}> {
   try {
-    const res = await fetch('/api/paypal-webhook/status');
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (err) {
-    console.warn('Failed to fetch webhook status:', err);
-  }
-  return null;
-}
-
-export async function simulateWebhookTest(options: {
-  eventType: string;
-  shouldSign: boolean;
-  targetEmail?: string;
-  planType?: 'monthly' | 'yearly';
-}): Promise<WebhookSimulationResult | null> {
-  try {
-    const res = await fetch('/api/paypal-webhook/simulate-test', {
+    const res = await fetch('/api/subscriptions/activate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
-      body: JSON.stringify(options),
+      body: JSON.stringify({ subscriptionID, planId, email }),
     });
-    if (res.ok) {
-      return await res.json();
+    const data = await res.json();
+    if (res.ok && data.success && data.user) {
+      setStoredUser(data.user);
     }
-  } catch (err) {
-    console.warn('Webhook simulation error:', err);
+    return data;
+  } catch (err: any) {
+    return { success: false, message: 'Network error activating subscription', error: err?.message };
   }
-  return null;
 }
+
+// 1. Simulates PayPal billing webhooks (e.g. cancellation, suspension, activation)
+export async function simulatePayPalWebhook(
+  eventType: 'BILLING.SUBSCRIPTION.CANCELLED' | 'BILLING.SUBSCRIPTION.SUSPENDED' | 'BILLING.SUBSCRIPTION.ACTIVATED' | string,
+  subscriptionId?: string,
+  email?: string,
+  note?: string
+): Promise<{
+  success: boolean;
+  event_type: string;
+  action: string;
+  user?: AuthUser;
+  auditLog?: any;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/webhooks/paypal/simulate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        event_type: eventType,
+        subscription_id: subscriptionId,
+        email,
+        note,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && data.success && data.user) {
+      setStoredUser(data.user);
+    }
+    return data;
+  } catch (err: any) {
+    return {
+      success: false,
+      event_type: eventType,
+      action: 'Failed to communicate with webhook simulation endpoint',
+      error: err?.message || 'Network error',
+    };
+  }
+}
+
+// 2. Inspects PayPal Webhook listener health and recent logs
+export async function getPayPalWebhookStatus(): Promise<{
+  status: string;
+  service: string;
+  webhookId: string;
+  supportedEvents: string[];
+  totalEventsLogged: number;
+  recentLogs: any[];
+} | null> {
+  try {
+    const res = await fetch('/api/webhooks/paypal', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export type SubscriptionDisplayBadgeState = 'Active' | 'Trialing' | 'Expired';
+
+export function getSubscriptionDisplayState(user: AuthUser | null | undefined): SubscriptionDisplayBadgeState {
+  if (!user) return 'Expired';
+  const statusUpper = (user.subscription_status || user.subscriptionStatus || '').toUpperCase();
+  if (statusUpper === 'ACTIVE') return 'Active';
+  if (statusUpper === 'SUSPENDED') return 'Expired';
+  if (statusUpper === 'CANCELLED') {
+    // Check if period end is still valid in future
+    if (user.currentPeriodEnd) {
+      const curEnd = new Date(user.currentPeriodEnd).getTime();
+      if (curEnd > Date.now()) {
+        return 'Active';
+      }
+    }
+    return 'Expired';
+  }
+  if (statusUpper === 'EXPIRED') return 'Expired';
+
+  // Check trial expiration
+  const trial = calculateTrialRemaining(user);
+  if (trial.isExpired) return 'Expired';
+  return 'Trialing';
+}
+
