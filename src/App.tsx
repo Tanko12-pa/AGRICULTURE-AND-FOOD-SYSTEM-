@@ -50,6 +50,12 @@ import { SubscriptionBillingView } from './components/SubscriptionBillingView';
 import { SubscriptionGateModal } from './components/SubscriptionGateModal';
 import { generateStructuredAuditPdf } from './utils/pdfReportGenerator';
 import { VoiceCommandAssistant } from './components/VoiceCommandAssistant';
+import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './components/OnboardingTour';
+import {
+  loadAutoSavedDatasets,
+  saveDatasetsToStorage,
+  clearAutoSavedDatasets,
+} from './utils/autoSaveStorage';
 import {
   fetchCurrentUser,
   calculateTrialRemaining,
@@ -83,10 +89,34 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
 
-  // Vision Pipeline Datasets
-  const [cropData, setCropData] = useState<CropAnalysisResult>(INITIAL_CROP_ANALYSIS);
-  const [pestData, setPestData] = useState<PestDetectionResult>(INITIAL_PEST_ANALYSIS);
-  const [qualityData, setQualityData] = useState<QualityInspectionResult>(INITIAL_QUALITY_ANALYSIS);
+  // Vision Pipeline Datasets with localStorage Auto-Save Recovery
+  const [cropData, setCropData] = useState<CropAnalysisResult>(() => {
+    const saved = loadAutoSavedDatasets();
+    return saved.cropData || INITIAL_CROP_ANALYSIS;
+  });
+  const [pestData, setPestData] = useState<PestDetectionResult>(() => {
+    const saved = loadAutoSavedDatasets();
+    return saved.pestData || INITIAL_PEST_ANALYSIS;
+  });
+  const [qualityData, setQualityData] = useState<QualityInspectionResult>(() => {
+    const saved = loadAutoSavedDatasets();
+    return saved.qualityData || INITIAL_QUALITY_ANALYSIS;
+  });
+
+  // Automatically persist vision datasets to localStorage to prevent data loss on refresh
+  useEffect(() => {
+    saveDatasetsToStorage(cropData, pestData, qualityData);
+  }, [cropData, pestData, qualityData]);
+
+  // Onboarding Tour state: opens automatically on first session, can be re-triggered anytime
+  const [isTourOpen, setIsTourOpen] = useState<boolean>(() => {
+    try {
+      const completed = localStorage.getItem(ONBOARDING_STORAGE_KEY);
+      return completed !== 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Security & MFA
   const [mfaEnabled, setMfaEnabled] = useState(true);
@@ -525,6 +555,7 @@ export default function App() {
 
   // Reset to Benchmark Data
   const handleResetData = () => {
+    clearAutoSavedDatasets();
     setCropData(INITIAL_CROP_ANALYSIS);
     setPestData(INITIAL_PEST_ANALYSIS);
     setQualityData(INITIAL_QUALITY_ANALYSIS);
@@ -647,6 +678,7 @@ export default function App() {
           onOpenSecurity={() => setIsSecurityModalOpen(true)}
           onOpenClearCache={() => setIsClearCacheModalOpen(true)}
           onToggleVoiceAssistant={() => setIsVoiceAssistantOpen((prev) => !prev)}
+          onStartTour={() => setIsTourOpen(true)}
           isAnalyzing={isAnalyzing}
           unreadAlertsCount={unreadAlertsCount}
           currentUser={currentUser}
@@ -673,6 +705,7 @@ export default function App() {
           onOpenClearCache={() => setIsClearCacheModalOpen(true)}
           onToggleVoiceAssistant={() => setIsVoiceAssistantOpen((prev) => !prev)}
           isVoiceActive={isVoiceAssistantOpen}
+          onStartTour={() => setIsTourOpen(true)}
         />
 
         {/* Subscription & 7-Day Free Trial Notice Banner */}
@@ -805,6 +838,8 @@ export default function App() {
                 onSelectTab={setActiveTab}
                 onRunAnalysis={handleRunPipeline}
                 isAnalyzing={isAnalyzing}
+                gpsCoordinates={lastGpsCoords}
+                onRefreshGps={captureLocation}
               />
             )}
 
@@ -964,6 +999,13 @@ export default function App() {
           onOpenChat={handleOpenChatWithPrompt}
         />
       )}
+
+      {/* Interactive Onboarding Tour for New Users */}
+      <OnboardingTour
+        isOpen={isTourOpen}
+        onClose={() => setIsTourOpen(false)}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+      />
     </div>
   );
 }

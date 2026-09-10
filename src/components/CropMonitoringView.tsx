@@ -31,6 +31,7 @@ import { CropQrScannerModal } from './CropQrScannerModal';
 import { CropGrowthTimelapseVisualizer } from './CropGrowthTimelapseVisualizer';
 import { QuickSensorImportModal } from './QuickSensorImportModal';
 import { CropHealthHistoricalTrendsChart } from './CropHealthHistoricalTrendsChart';
+import { GrowthCyclePredictor } from './GrowthCyclePredictor';
 
 
 interface CropMonitoringViewProps {
@@ -737,6 +738,12 @@ export const CropMonitoringView: React.FC<CropMonitoringViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* GROWTH CYCLE PREDICTOR & SMART IRRIGATION SCHEDULER */}
+      <GrowthCyclePredictor
+        cropData={data}
+        onOpenChatWithPrompt={onOpenChatWithPrompt}
+      />
 
       {/* HISTORICAL 7-DAY HEALTH SCORE TRENDS (RECHARTS) */}
       <CropHealthHistoricalTrendsChart

@@ -16,10 +16,11 @@ import {
   FileText,
   Check,
 } from 'lucide-react';
-import { CropAnalysisResult, PestDetectionResult, QualityInspectionResult, ActiveTab } from '../types';
+import { CropAnalysisResult, PestDetectionResult, QualityInspectionResult, ActiveTab, GpsCoordinates } from '../types';
 import { generateStructuredAuditPdf } from '../utils/pdfReportGenerator';
 import { TelemetryTooltip } from './TelemetryTooltip';
 import { CropPestTrendD3Chart } from './CropPestTrendD3Chart';
+import { OverviewWeatherWidget } from './OverviewWeatherWidget';
 
 interface OverviewPipelineViewProps {
   cropData: CropAnalysisResult;
@@ -28,6 +29,8 @@ interface OverviewPipelineViewProps {
   onSelectTab: (tab: ActiveTab) => void;
   onRunAnalysis: () => void;
   isAnalyzing: boolean;
+  gpsCoordinates?: GpsCoordinates | null;
+  onRefreshGps?: () => void;
 }
 
 export const OverviewPipelineView: React.FC<OverviewPipelineViewProps> = ({
@@ -37,6 +40,8 @@ export const OverviewPipelineView: React.FC<OverviewPipelineViewProps> = ({
   onSelectTab,
   onRunAnalysis,
   isAnalyzing,
+  gpsCoordinates,
+  onRefreshGps,
 }) => {
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [downloadSuccessMessage, setDownloadSuccessMessage] = useState<string | null>(null);
@@ -66,6 +71,12 @@ export const OverviewPipelineView: React.FC<OverviewPipelineViewProps> = ({
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className="space-y-6"
     >
+      {/* Real-time Hyper-Local Weather Telemetry Widget using Geolocation */}
+      <OverviewWeatherWidget
+        gpsCoordinates={gpsCoordinates}
+        onRefreshGps={onRefreshGps}
+      />
+
       {/* 3 Core Computer Vision Modules Grid Layout (High Density Theme) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* MODULE 1: CROP MONITORING CARD */}

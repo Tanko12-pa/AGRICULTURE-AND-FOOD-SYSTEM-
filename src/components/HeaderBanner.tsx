@@ -11,6 +11,7 @@ interface HeaderBannerProps {
   onOpenClearCache?: () => void;
   onToggleVoiceAssistant?: () => void;
   isVoiceActive?: boolean;
+  onStartTour?: () => void;
 }
 
 export const HeaderBanner: React.FC<HeaderBannerProps> = ({
@@ -21,6 +22,7 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
   onOpenClearCache,
   onToggleVoiceAssistant,
   isVoiceActive,
+  onStartTour,
 }) => {
   // Compute trial status if applicable
   const now = Date.now();
@@ -116,6 +118,18 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
             >
               <Trash2 className="w-3.5 h-3.5 text-gray-500" />
               <span className="hidden sm:inline">Clean Cache</span>
+            </button>
+          )}
+
+          {onStartTour && (
+            <button
+              id="btn-start-onboarding-tour"
+              onClick={onStartTour}
+              title="Start Onboarding Guided Tour"
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-[#1B4332] bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#D4A373]" />
+              <span className="hidden sm:inline">Tour</span>
             </button>
           )}
 

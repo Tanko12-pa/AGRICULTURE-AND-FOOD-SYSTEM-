@@ -49,6 +49,7 @@ interface LeftControlPanelProps {
   onOpenSecurity?: () => void;
   onOpenClearCache?: () => void;
   onToggleVoiceAssistant?: () => void;
+  onStartTour?: () => void;
   isAnalyzing: boolean;
   unreadAlertsCount: number;
 }
@@ -74,6 +75,7 @@ export const LeftControlPanel: React.FC<LeftControlPanelProps> = ({
   onOpenSecurity,
   onOpenClearCache,
   onToggleVoiceAssistant,
+  onStartTour,
   isAnalyzing,
   unreadAlertsCount,
 }) => {
@@ -515,6 +517,22 @@ export const LeftControlPanel: React.FC<LeftControlPanelProps> = ({
               <span>Reset Demo</span>
             </button>
           </div>
+
+          {onStartTour && (
+            <button
+              id="btn-sidebar-tour"
+              onClick={onStartTour}
+              className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium bg-[#153427] hover:bg-[#2D5A27] text-amber-200 border border-amber-800/40 transition-all group cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-[#D4A373] group-hover:rotate-12 transition-transform" />
+                Quick Onboarding Tour
+              </span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#1B4332] text-[#D4A373] font-mono border border-[#2D5A27]">
+                Start
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Clear Cookies & Cache Button */}
