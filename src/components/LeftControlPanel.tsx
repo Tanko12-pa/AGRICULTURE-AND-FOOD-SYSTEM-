@@ -23,6 +23,8 @@ import {
   Smartphone,
   CreditCard,
   Trash2,
+  FileText,
+  Mic,
 } from 'lucide-react';
 import { ActiveTab, UserRole, AuthUser } from '../types';
 
@@ -42,9 +44,11 @@ interface LeftControlPanelProps {
   onTriggerEmergencyAlert: () => void;
   onOpenChat: () => void;
   onExportReport: () => void;
+  onExportPdfReport?: () => void;
   onResetData: () => void;
   onOpenSecurity?: () => void;
   onOpenClearCache?: () => void;
+  onToggleVoiceAssistant?: () => void;
   isAnalyzing: boolean;
   unreadAlertsCount: number;
 }
@@ -65,9 +69,11 @@ export const LeftControlPanel: React.FC<LeftControlPanelProps> = ({
   onTriggerEmergencyAlert,
   onOpenChat,
   onExportReport,
+  onExportPdfReport,
   onResetData,
   onOpenSecurity,
   onOpenClearCache,
+  onToggleVoiceAssistant,
   isAnalyzing,
   unreadAlertsCount,
 }) => {
@@ -459,25 +465,56 @@ export const LeftControlPanel: React.FC<LeftControlPanelProps> = ({
           </button>
         )}
 
-        {/* Export & Reset Row */}
-        <div className="grid grid-cols-2 gap-1.5">
-          <button
-            id="btn-export-audit"
-            onClick={onExportReport}
-            className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-medium bg-[#153427] hover:bg-[#2D5A27] text-white/80 border border-[#2D5A27] transition-all"
-          >
-            <Download className="w-3 h-3 text-[#D4A373]" />
-            <span>Export JSON</span>
-          </button>
+        {/* Export & Reset Controls */}
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
+            {onExportPdfReport ? (
+              <button
+                id="btn-export-pdf"
+                onClick={onExportPdfReport}
+                className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-bold bg-[#1B4332] hover:bg-[#2D5A27] text-white border border-emerald-500/50 transition-all cursor-pointer shadow-xs"
+                title="Export formatted PDF audit report (jsPDF)"
+              >
+                <FileText className="w-3 h-3 text-[#D4A373]" />
+                <span>Export PDF</span>
+              </button>
+            ) : null}
 
-          <button
-            id="btn-reset-presets"
-            onClick={onResetData}
-            className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-medium bg-[#153427] hover:bg-[#2D5A27] text-white/80 border border-[#2D5A27] transition-all"
-          >
-            <RotateCcw className="w-3 h-3 text-white/60" />
-            <span>Reset Demo</span>
-          </button>
+            <button
+              id="btn-export-audit"
+              onClick={onExportReport}
+              className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-medium bg-[#153427] hover:bg-[#2D5A27] text-white/80 border border-[#2D5A27] transition-all cursor-pointer"
+              title="Export complete telemetry payload as JSON"
+            >
+              <Download className="w-3 h-3 text-white/70" />
+              <span>Export JSON</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            {onToggleVoiceAssistant && (
+              <button
+                id="btn-voice-assistant-toggle"
+                onClick={onToggleVoiceAssistant}
+                className="flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-medium bg-[#153427] hover:bg-[#2D5A27] text-white/90 border border-[#2D5A27] transition-all cursor-pointer"
+                title="Toggle Web Speech Voice Command Assistant"
+              >
+                <Mic className="w-3 h-3 text-emerald-400" />
+                <span>Voice AI</span>
+              </button>
+            )}
+
+            <button
+              id="btn-reset-presets"
+              onClick={onResetData}
+              className={`flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-[10px] font-medium bg-[#153427] hover:bg-[#2D5A27] text-white/80 border border-[#2D5A27] transition-all cursor-pointer ${
+                !onToggleVoiceAssistant ? 'col-span-2' : ''
+              }`}
+            >
+              <RotateCcw className="w-3 h-3 text-white/60" />
+              <span>Reset Demo</span>
+            </button>
+          </div>
         </div>
 
         {/* Clear Cookies & Cache Button */}

@@ -36,6 +36,63 @@ export interface AuthUser {
 }
 
 
+export interface GpsCoordinates {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  altitude?: number | null;
+  heading?: number | null;
+  speed?: number | null;
+  timestamp: number;
+  formatted: string; // e.g. "38.5449° N, 121.7405° W"
+  sectorHint?: string;
+  isFallback?: boolean;
+}
+
+export interface HyperLocalHourlyPoint {
+  time: string; // "14:00"
+  temperatureC: number;
+  humidity: number;
+  windSpeedKmh: number;
+}
+
+export interface HyperLocalWeather {
+  latitude: number;
+  longitude: number;
+  temperatureC: number;
+  temperatureF: number;
+  humidity: number; // percentage 0-100
+  windSpeedKmh: number;
+  windSpeedMps: number;
+  windSpeedMph: number;
+  windDirectionDeg: number;
+  windDirectionCompass: string;
+  apparentTemperatureC: number;
+  weatherCode: number;
+  weatherDescription: string;
+  dewPointC: number;
+  precipitationMm: number;
+  sprayCondition: 'Optimal' | 'Caution' | 'Warning' | 'Unfavorable';
+  sprayConditionSummary: string;
+  leafWetnessRisk: 'Low' | 'Moderate' | 'High';
+  lastUpdated: string;
+  source: string;
+  isOfflineCached?: boolean;
+  hourlyForecast?: HyperLocalHourlyPoint[];
+}
+
+export interface CropPestHistoricalTrendPoint {
+  date: string; // "Aug 11"
+  isoDate: string; // "2026-08-11"
+  dayNumber: number; // 1 to 30
+  cropHealthScore: number; // 0 - 100
+  pestSeverityIndex: number; // 0 - 100
+  ndvi: number; // 0.0 - 1.0
+  eventNote?: string;
+  rainfallMm?: number;
+  temperatureC?: number;
+}
+
 export interface BoundingBox {
   label: string;
   ymin: number; // 0 - 1000
@@ -77,6 +134,7 @@ export interface CropAnalysisResult {
   };
   boundingBoxes: BoundingBox[];
   observationalLogs?: CropObservationalLog[];
+  gpsCoordinates?: GpsCoordinates;
 }
 
 export interface PestDetectionResult {
@@ -93,6 +151,8 @@ export interface PestDetectionResult {
     quarantineRecommended: boolean;
   };
   detectedEntities: BoundingBox[];
+  location?: string;
+  gpsCoordinates?: GpsCoordinates;
 }
 
 export interface ProduceItemBreakdown {
@@ -123,6 +183,8 @@ export interface QualityInspectionResult {
     firmnessIndex: number;
   };
   inspectorNotes: string;
+  location?: string;
+  gpsCoordinates?: GpsCoordinates;
 }
 
 export interface A2AJudgeResult {

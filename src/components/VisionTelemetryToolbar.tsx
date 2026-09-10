@@ -11,8 +11,9 @@ import {
   Layers,
   FileCode,
   Info,
+  MapPin,
 } from 'lucide-react';
-import { CropAnalysisResult, PestDetectionResult, QualityInspectionResult, ActiveTab } from '../types';
+import { CropAnalysisResult, PestDetectionResult, QualityInspectionResult, ActiveTab, GpsCoordinates } from '../types';
 import { TelemetryTooltip } from './TelemetryTooltip';
 
 interface VisionTelemetryToolbarProps {
@@ -21,6 +22,7 @@ interface VisionTelemetryToolbarProps {
   pestData: PestDetectionResult;
   qualityData: QualityInspectionResult;
   onSelectTab?: (tab: ActiveTab) => void;
+  gpsCoordinates?: GpsCoordinates | null;
 }
 
 export const VisionTelemetryToolbar: React.FC<VisionTelemetryToolbarProps> = ({
@@ -28,6 +30,7 @@ export const VisionTelemetryToolbar: React.FC<VisionTelemetryToolbarProps> = ({
   cropData,
   pestData,
   qualityData,
+  gpsCoordinates,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);
@@ -167,6 +170,16 @@ export const VisionTelemetryToolbar: React.FC<VisionTelemetryToolbarProps> = ({
           <span className="text-[11px] font-mono text-gray-400 hidden xl:inline">
             {jsonLines} lines • {(jsonByteSize / 1024).toFixed(1)} KB
           </span>
+
+          {(gpsCoordinates || cropData.gpsCoordinates || pestData.gpsCoordinates) && (
+            <div
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-mono font-semibold"
+              title={`Tagged GPS Coordinate telemetry: ${(gpsCoordinates || cropData.gpsCoordinates || pestData.gpsCoordinates)?.formatted}`}
+            >
+              <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
+              <span>{(gpsCoordinates || cropData.gpsCoordinates || pestData.gpsCoordinates)?.formatted}</span>
+            </div>
+          )}
         </div>
 
         {/* Right: Actions (Copy to Clipboard + Toggle Raw JSON) */}

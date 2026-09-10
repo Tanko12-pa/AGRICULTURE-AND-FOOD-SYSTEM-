@@ -1,4 +1,10 @@
 import { CropAnalysisResult, PestDetectionResult, QualityInspectionResult, A2AJudgeResult, OfflineSyncQueueItem } from '../types';
+import {
+  validateCropAnalysis,
+  validatePestDetection,
+  validateQualityInspection,
+  validateA2AJudge,
+} from '../utils/visionValidation';
 
 const OFFLINE_QUEUE_KEY = 'agri_vision_offline_queue';
 const CACHED_INSPECTIONS_KEY = 'agri_vision_cached_inspections';
@@ -47,7 +53,12 @@ export async function analyzeCrop(payload: {
       throw new Error(`Server returned ${response.status}: ${response.statusText}`);
     }
 
-    return await response.json();
+    const json = await response.json();
+    const validated = validateCropAnalysis(json.data);
+    return {
+      ...json,
+      data: validated.data,
+    };
   } catch (err: any) {
     console.warn('Network call failed, using offline fallback capability:', err);
     saveToOfflineQueue({
@@ -77,7 +88,12 @@ export async function detectPest(payload: {
       throw new Error(`Server returned ${response.status}: ${response.statusText}`);
     }
 
-    return await response.json();
+    const json = await response.json();
+    const validated = validatePestDetection(json.data);
+    return {
+      ...json,
+      data: validated.data,
+    };
   } catch (err: any) {
     console.warn('Network call failed, queueing offline:', err);
     saveToOfflineQueue({
@@ -107,7 +123,12 @@ export async function inspectQuality(payload: {
       throw new Error(`Server returned ${response.status}: ${response.statusText}`);
     }
 
-    return await response.json();
+    const json = await response.json();
+    const validated = validateQualityInspection(json.data);
+    return {
+      ...json,
+      data: validated.data,
+    };
   } catch (err: any) {
     console.warn('Network call failed, queueing offline:', err);
     saveToOfflineQueue({
@@ -136,7 +157,12 @@ export async function runA2AJudge(payload: {
     throw new Error(`A2A evaluation error ${response.status}`);
   }
 
-  return await response.json();
+  const json = await response.json();
+  const validated = validateA2AJudge(json.data);
+  return {
+    ...json,
+    data: validated.data,
+  };
 }
 
 export async function sendChatMessage(

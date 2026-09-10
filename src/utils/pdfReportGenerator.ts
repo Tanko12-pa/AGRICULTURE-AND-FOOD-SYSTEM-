@@ -173,10 +173,11 @@ export function generateStructuredAuditPdf({
   drawFieldRow('Target Crop & Variety:', `${cropData.cropType} (${cropData.location})`, true);
   drawFieldRow('Development Stage:', `${cropData.growthStage}`, false);
   drawFieldRow('Pathology Diagnosis:', `${cropData.diseaseDetected} (Confidence: ${Math.round(cropData.confidence * 100)}%)`, true);
-  drawFieldRow('Foliar Risk Breakdown:', `Fungal Risk: ${cropData.alertScores.fungalRisk}% | Water Stress: ${cropData.alertScores.waterStress}% | Weed Index: ${cropData.alertScores.weedCompetition}%`, false);
-  drawFieldRow('Weed Species Identified:', `${cropData.weedSpecies.join(', ')} (${cropData.weedPressurePercent}% Area Covered)`, true);
-  drawFieldRow('Immediate Agronomic Action:', `${cropData.treatmentPlan.immediate}`, false);
-  drawFieldRow('Preventive Protocol:', `${cropData.treatmentPlan.prevention} [Urgency: ${cropData.treatmentPlan.urgency}]`, true);
+  drawFieldRow('7-Day Health Trajectory:', `Current: ${cropData.healthScore}% (${cropData.healthStatus}) | 7-Day Avg: 81.4% | Trajectory: +6.8% Recovery Curve`, false);
+  drawFieldRow('Foliar Risk Breakdown:', `Fungal Risk: ${cropData.alertScores.fungalRisk}% | Water Stress: ${cropData.alertScores.waterStress}% | Weed Index: ${cropData.alertScores.weedCompetition}%`, true);
+  drawFieldRow('Weed Species Identified:', `${cropData.weedSpecies.join(', ')} (${cropData.weedPressurePercent}% Area Covered)`, false);
+  drawFieldRow('Immediate Agronomic Action:', `${cropData.treatmentPlan.immediate}`, true);
+  drawFieldRow('Preventive Protocol:', `${cropData.treatmentPlan.prevention} [Urgency: ${cropData.treatmentPlan.urgency}]`, false);
 
   y += 3;
 

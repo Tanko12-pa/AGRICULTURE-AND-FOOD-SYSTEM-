@@ -22,6 +22,7 @@ import {
   RotateCcw,
   ShieldCheck,
   ArrowRight,
+  Download,
 } from 'lucide-react';
 import { CropAnalysisResult, CropTagRecord, SoilSensorImportData } from '../types';
 import { TelemetryTooltip } from './TelemetryTooltip';
@@ -29,6 +30,7 @@ import { FieldVoiceNotesRecorder } from './FieldVoiceNotesRecorder';
 import { CropQrScannerModal } from './CropQrScannerModal';
 import { CropGrowthTimelapseVisualizer } from './CropGrowthTimelapseVisualizer';
 import { QuickSensorImportModal } from './QuickSensorImportModal';
+import { CropHealthHistoricalTrendsChart } from './CropHealthHistoricalTrendsChart';
 
 
 interface CropMonitoringViewProps {
@@ -37,6 +39,7 @@ interface CropMonitoringViewProps {
   isAnalyzing: boolean;
   deepThinking: boolean;
   onOpenChatWithPrompt?: (prompt: string) => void;
+  onExportPdf?: () => void;
 }
 
 export const CropMonitoringView: React.FC<CropMonitoringViewProps> = ({
@@ -45,6 +48,7 @@ export const CropMonitoringView: React.FC<CropMonitoringViewProps> = ({
   isAnalyzing,
   deepThinking,
   onOpenChatWithPrompt,
+  onExportPdf,
 }) => {
   const [showBoxes, setShowBoxes] = useState(true);
   const [selectedCropPreset, setSelectedCropPreset] = useState('Soybean');
@@ -217,6 +221,19 @@ export const CropMonitoringView: React.FC<CropMonitoringViewProps> = ({
             <QrCode className="w-3.5 h-3.5 text-[#D4A373]" />
             <span>Scan Crop Tag (QR)</span>
           </button>
+
+          {/* Formatted PDF Export Trigger */}
+          {onExportPdf && (
+            <button
+              id="btn-export-pdf-crop-header"
+              onClick={onExportPdf}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-white hover:bg-emerald-50 text-[#1B4332] border border-[#1B4332]/40 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+              title="Export current analysis as a formatted PDF audit report (jsPDF)"
+            >
+              <Download className="w-3.5 h-3.5 text-[#1B4332]" />
+              <span>Export PDF Report</span>
+            </button>
+          )}
 
           <div className="h-4 w-px bg-gray-300 hidden sm:block mx-1" />
 
@@ -720,6 +737,13 @@ export const CropMonitoringView: React.FC<CropMonitoringViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* HISTORICAL 7-DAY HEALTH SCORE TRENDS (RECHARTS) */}
+      <CropHealthHistoricalTrendsChart
+        cropData={data}
+        onOpenChatWithPrompt={onOpenChatWithPrompt}
+        onExportPdf={onExportPdf}
+      />
 
       {/* CROP GROWTH PROGRESS & PHENOLOGICAL TIMELAPSE VISUALIZER */}
       <CropGrowthTimelapseVisualizer

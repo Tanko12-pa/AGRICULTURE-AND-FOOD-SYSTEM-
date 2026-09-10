@@ -9,6 +9,7 @@ import {
   PestDetectionResult,
   QualityInspectionResult,
   AlertNotification,
+  GpsCoordinates,
 } from './types';
 import {
   INITIAL_CROP_ANALYSIS,
@@ -22,6 +23,12 @@ import {
   inspectQuality,
   evaluateRealtimeAlerts,
 } from './services/api';
+import {
+  validateCropAnalysis,
+  validatePestDetection,
+  validateQualityInspection,
+} from './utils/visionValidation';
+import { useGeolocation } from './hooks/useGeolocation';
 import { LeftControlPanel } from './components/LeftControlPanel';
 import { HeaderBanner } from './components/HeaderBanner';
 import { OverviewPipelineView } from './components/OverviewPipelineView';
@@ -41,6 +48,8 @@ import { PushNotificationToast } from './components/PushNotificationToast';
 import { VisionTelemetryToolbar } from './components/VisionTelemetryToolbar';
 import { SubscriptionBillingView } from './components/SubscriptionBillingView';
 import { SubscriptionGateModal } from './components/SubscriptionGateModal';
+import { generateStructuredAuditPdf } from './utils/pdfReportGenerator';
+import { VoiceCommandAssistant } from './components/VoiceCommandAssistant';
 import {
   fetchCurrentUser,
   calculateTrialRemaining,
@@ -93,6 +102,12 @@ export default function App() {
   // Alert Notifications & Real-Time Push Toast
   const [notifications, setNotifications] = useState<AlertNotification[]>(INITIAL_NOTIFICATIONS);
   const [activeUrgentAlert, setActiveUrgentAlert] = useState<AlertNotification | null>(null);
+
+  // Web Speech API Voice Command Assistant State
+  const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(true);
+
+  // Browser Geolocation API Hook for Field & Camera Telemetry Tagging
+  const { captureLocation, coordinates: lastGpsCoords } = useGeolocation();
 
   // File Upload Reference
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -152,8 +167,9 @@ export default function App() {
           deepThinking,
         });
         if (res && res.data) {
-          updatedCrop = res.data;
-          setCropData(res.data);
+          const validated = validateCropAnalysis(res.data);
+          updatedCrop = validated.data;
+          setCropData(validated.data);
         }
       }
 
@@ -163,8 +179,9 @@ export default function App() {
           location: 'Greenhouse Sector 2',
         });
         if (res && res.data) {
-          updatedPest = res.data;
-          setPestData(res.data);
+          const validated = validatePestDetection(res.data);
+          updatedPest = validated.data;
+          setPestData(validated.data);
         }
       }
 
@@ -174,8 +191,9 @@ export default function App() {
           batchId: qualityData.batchId,
         });
         if (res && res.data) {
-          updatedQuality = res.data;
-          setQualityData(res.data);
+          const validated = validateQualityInspection(res.data);
+          updatedQuality = validated.data;
+          setQualityData(validated.data);
         }
       }
 
@@ -228,17 +246,18 @@ export default function App() {
     try {
       const res = await analyzeCrop({ cropType, deepThinking });
       if (res && res.data) {
-        setCropData(res.data);
-        if (res.data.healthScore < 60) {
+        const validated = validateCropAnalysis(res.data);
+        setCropData(validated.data);
+        if (validated.data.healthScore < 60) {
           const urgentAlert: AlertNotification = {
             id: 'crop-outbreak-' + Date.now(),
-            title: `CRITICAL DISEASE OUTBREAK: ${res.data.diseaseDetected}`,
-            message: `Crop health has fallen to ${res.data.healthScore}%. Immediate isolation and treatment advised.`,
+            title: `CRITICAL DISEASE OUTBREAK: ${validated.data.diseaseDetected}`,
+            message: `Crop health has fallen to ${validated.data.healthScore}%. Immediate isolation and treatment advised.`,
             severity: 'critical',
             priority: 'CRITICAL',
             category: 'disease_outbreak',
             urgency: 'Immediate (< 30 Mins)',
-            recommendedAction: res.data.treatmentPlan.immediate,
+            recommendedAction: validated.data.treatmentPlan.immediate,
             timestamp: 'Just now',
             module: 'Crop Monitoring',
             read: false,
@@ -260,17 +279,18 @@ export default function App() {
     try {
       const res = await detectPest({ plantHost });
       if (res && res.data) {
-        setPestData(res.data);
-        if (res.data.severityIndex >= 70) {
+        const validated = validatePestDetection(res.data);
+        setPestData(validated.data);
+        if (validated.data.severityIndex >= 70) {
           const urgentAlert: AlertNotification = {
             id: 'pest-alert-' + Date.now(),
-            title: `SEVERE PEST INFESTATION: ${res.data.primaryPest}`,
-            message: `Severity index breached threshold (${res.data.severityIndex}/100). Leaf damage estimate: ${res.data.leafDamagePercentage}%.`,
+            title: `SEVERE PEST INFESTATION: ${validated.data.primaryPest}`,
+            message: `Severity index breached threshold (${validated.data.severityIndex}/100). Leaf damage estimate: ${validated.data.leafDamagePercentage}%.`,
             severity: 'critical',
             priority: 'CRITICAL',
             category: 'pest_infestation',
             urgency: 'Immediate (< 30 Mins)',
-            recommendedAction: res.data.recommendedAction?.biologicalControl,
+            recommendedAction: validated.data.recommendedAction?.biologicalControl,
             timestamp: 'Just now',
             module: 'Pest Detection',
             read: false,
@@ -292,12 +312,13 @@ export default function App() {
     try {
       const res = await inspectQuality({ produceType });
       if (res && res.data) {
-        setQualityData(res.data);
-        if (res.data.defectsScore > 30 || res.data.overallGrade === 'Reject') {
+        const validated = validateQualityInspection(res.data);
+        setQualityData(validated.data);
+        if (validated.data.defectsScore > 30 || validated.data.overallGrade === 'Reject') {
           const urgentAlert: AlertNotification = {
             id: 'quality-reject-' + Date.now(),
-            title: `MAJOR FOOD QUALITY REJECTION: Batch ${res.data.batchId}`,
-            message: `Defect rate at ${res.data.defectsScore}% exceeds export threshold. Pneumatic diverter activated.`,
+            title: `MAJOR FOOD QUALITY REJECTION: Batch ${validated.data.batchId}`,
+            message: `Defect rate at ${validated.data.defectsScore}% exceeds export threshold. Pneumatic diverter activated.`,
             severity: 'warning',
             priority: 'WARNING',
             category: 'quality_failure',
@@ -344,38 +365,97 @@ export default function App() {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Capture user's GPS coordinates via Browser Geolocation API when image is uploaded
+    const coords = await captureLocation();
 
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result as string;
-      handleCaptureImage(base64);
+      handleCaptureImage(base64, coords);
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   // Camera or Image File captured
-  const handleCaptureImage = async (base64Image: string) => {
+  const handleCaptureImage = async (base64Image: string, explicitCoords?: GpsCoordinates) => {
     setIsAnalyzing(true);
     try {
+      // Capture GPS location via Browser Geolocation API if not already provided
+      const coords = explicitCoords || (await captureLocation());
+
       if (activeTab === 'crop') {
-        const res = await analyzeCrop({ imageBase64: base64Image, cropType: 'Custom Uploaded Leaf' });
-        if (res && res.data) setCropData(res.data);
+        const res = await analyzeCrop({
+          imageBase64: base64Image,
+          cropType: 'Custom Uploaded Leaf',
+          location: `Field Plot [${coords.formatted}]`,
+        });
+        if (res && res.data) {
+          const validated = validateCropAnalysis(res.data);
+          const taggedCrop: CropAnalysisResult = {
+            ...validated.data,
+            location: validated.data.location.includes(coords.formatted)
+              ? validated.data.location
+              : `${validated.data.location} [GPS: ${coords.formatted}]`,
+            gpsCoordinates: coords,
+          };
+          setCropData(taggedCrop);
+        }
       } else if (activeTab === 'quality') {
-        const res = await inspectQuality({ imageBase64: base64Image, produceType: 'Custom Uploaded Produce' });
-        if (res && res.data) setQualityData(res.data);
+        const res = await inspectQuality({
+          imageBase64: base64Image,
+          produceType: 'Custom Uploaded Produce',
+        });
+        if (res && res.data) {
+          const validated = validateQualityInspection(res.data);
+          const taggedQuality: QualityInspectionResult = {
+            ...validated.data,
+            location: `Packing Station [GPS: ${coords.formatted}]`,
+            gpsCoordinates: coords,
+          };
+          setQualityData(taggedQuality);
+        }
       } else {
-        const res = await detectPest({ imageBase64: base64Image, plantHost: 'Custom Foliage Sample' });
-        if (res && res.data) setPestData(res.data);
+        const res = await detectPest({
+          imageBase64: base64Image,
+          plantHost: 'Custom Foliage Sample',
+          location: `Field Sector [GPS: ${coords.formatted}]`,
+        });
+        if (res && res.data) {
+          const validated = validatePestDetection(res.data);
+          const taggedPest: PestDetectionResult = {
+            ...validated.data,
+            location: `Field Sector [GPS: ${coords.formatted}]`,
+            gpsCoordinates: coords,
+          };
+          setPestData(taggedPest);
+        }
       }
+
+      // Tag all active telemetry models with captured GPS fix
+      setCropData((prev) => ({ ...prev, gpsCoordinates: coords }));
+      setPestData((prev) => ({ ...prev, gpsCoordinates: coords }));
+      setQualityData((prev) => ({ ...prev, gpsCoordinates: coords }));
 
       setNotifications((prev) => [
         {
+          id: 'geo-tagged-' + Date.now(),
+          title: 'Telemetry Tagged with GPS Coordinates',
+          message: `Optical observation tagged with ${coords.formatted} (${coords.isFallback ? 'Davis AgTech Benchmark Sector' : 'Live Browser GPS fix with ±' + (coords.accuracy ?? 3.5) + 'm accuracy'}).`,
+          severity: 'success',
+          priority: 'INFO',
+          timestamp: 'Just now',
+          module: 'System',
+          read: false,
+        },
+        {
           id: 'upload-' + Date.now(),
           title: 'Custom Optical Sample Analyzed',
-          message: 'Image successfully passed through ViT & YOLOv8 inference pipeline.',
+          message: 'Image successfully passed through ViT & YOLOv8 inference pipeline with Zod validation verification.',
           severity: 'success',
           priority: 'INFO',
           timestamp: 'Just now',
@@ -396,6 +476,7 @@ export default function App() {
     const report = {
       system: 'Agriculture & Food System (Computer Vision)',
       exportedAt: new Date().toISOString(),
+      gpsCoordinates: lastGpsCoords || cropData.gpsCoordinates || pestData.gpsCoordinates,
       userRole,
       mfaVerified: mfaEnabled,
       cropMonitoringTelemetry: cropData,
@@ -411,6 +492,35 @@ export default function App() {
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+  };
+
+  // Export Formatted PDF Report (jsPDF)
+  const handleExportPdfReport = () => {
+    try {
+      const sector = cropData.location || 'North Quadrant Zone 4B (Sector 12)';
+      const inspector = currentUser?.fullName ? `${currentUser.fullName} (${userRole})` : `Field Scout (${userRole})`;
+      const filename = generateStructuredAuditPdf({
+        cropData,
+        pestData,
+        qualityData,
+        farmSector: sector,
+        inspectorName: inspector,
+      });
+
+      const newNotif: AlertNotification = {
+        id: 'notif-pdf-' + Date.now(),
+        title: 'PDF Audit Report Exported',
+        message: `Successfully generated and downloaded formatted PDF audit report: ${filename}`,
+        severity: 'success',
+        priority: 'INFO',
+        timestamp: 'Just now',
+        module: 'System',
+        read: false,
+      };
+      setNotifications((prev) => [newNotif, ...prev]);
+    } catch (err) {
+      console.error('Failed to generate PDF audit report:', err);
+    }
   };
 
   // Reset to Benchmark Data
@@ -532,9 +642,11 @@ export default function App() {
             setIsChatModalOpen(true);
           }}
           onExportReport={handleExportReport}
+          onExportPdfReport={handleExportPdfReport}
           onResetData={handleResetData}
           onOpenSecurity={() => setIsSecurityModalOpen(true)}
           onOpenClearCache={() => setIsClearCacheModalOpen(true)}
+          onToggleVoiceAssistant={() => setIsVoiceAssistantOpen((prev) => !prev)}
           isAnalyzing={isAnalyzing}
           unreadAlertsCount={unreadAlertsCount}
           currentUser={currentUser}
@@ -559,6 +671,8 @@ export default function App() {
           currentUser={currentUser}
           onNavigateToBilling={() => setActiveTab('billing')}
           onOpenClearCache={() => setIsClearCacheModalOpen(true)}
+          onToggleVoiceAssistant={() => setIsVoiceAssistantOpen((prev) => !prev)}
+          isVoiceActive={isVoiceAssistantOpen}
         />
 
         {/* Subscription & 7-Day Free Trial Notice Banner */}
@@ -674,6 +788,7 @@ export default function App() {
             pestData={pestData}
             qualityData={qualityData}
             onSelectTab={setActiveTab}
+            gpsCoordinates={lastGpsCoords}
           />
 
           <motion.div
@@ -721,6 +836,7 @@ export default function App() {
                 isAnalyzing={isAnalyzing}
                 deepThinking={deepThinking}
                 onOpenChatWithPrompt={handleOpenChatWithPrompt}
+                onExportPdf={handleExportPdfReport}
               />
             )}
 
@@ -756,7 +872,12 @@ export default function App() {
 
             {activeTab === 'datasets' && <DatasetsView />}
 
-            {activeTab === 'map' && <OfflineMapView />}
+            {activeTab === 'map' && (
+              <OfflineMapView
+                gpsCoordinates={lastGpsCoords}
+                onRefreshGps={captureLocation}
+              />
+            )}
           </motion.div>
         </section>
       </main>
@@ -810,6 +931,7 @@ export default function App() {
         isOpen={isCameraModalOpen}
         onClose={() => setIsCameraModalOpen(false)}
         onCaptureImage={handleCaptureImage}
+        gpsCoordinates={lastGpsCoords}
       />
 
       <SecurityMfaModal
@@ -829,6 +951,19 @@ export default function App() {
           handleResetData();
         }}
       />
+
+      {/* Web Speech API Voice Command Assistant */}
+      {isVoiceAssistantOpen && (
+        <VoiceCommandAssistant
+          activeTab={activeTab}
+          onNavigateTab={(tab) => setActiveTab(tab)}
+          onRunPipeline={handleRunPipeline}
+          onExportPdf={handleExportPdfReport}
+          onExportJson={handleExportReport}
+          onResetData={handleResetData}
+          onOpenChat={handleOpenChatWithPrompt}
+        />
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Leaf, Cpu, Sparkles, Activity, ShieldCheck, Radio, Clock, CreditCard, Trash2 } from 'lucide-react';
+import { Eye, Leaf, Cpu, Sparkles, Activity, ShieldCheck, Radio, Clock, CreditCard, Trash2, Mic } from 'lucide-react';
 import { UserRole, AuthUser } from '../types';
 
 interface HeaderBannerProps {
@@ -9,6 +9,8 @@ interface HeaderBannerProps {
   currentUser?: AuthUser | null;
   onNavigateToBilling?: () => void;
   onOpenClearCache?: () => void;
+  onToggleVoiceAssistant?: () => void;
+  isVoiceActive?: boolean;
 }
 
 export const HeaderBanner: React.FC<HeaderBannerProps> = ({
@@ -17,6 +19,8 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
   currentUser,
   onNavigateToBilling,
   onOpenClearCache,
+  onToggleVoiceAssistant,
+  isVoiceActive,
 }) => {
   // Compute trial status if applicable
   const now = Date.now();
@@ -84,6 +88,23 @@ export const HeaderBanner: React.FC<HeaderBannerProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
               1 CRITICAL ALERT
             </span>
+          )}
+
+          {/* Voice AI Command Assistant Trigger */}
+          {onToggleVoiceAssistant && (
+            <button
+              id="btn-voice-ai-header"
+              onClick={onToggleVoiceAssistant}
+              title="Toggle Web Speech Voice Command Assistant"
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                isVoiceActive
+                  ? 'bg-emerald-600 text-white animate-pulse shadow-xs'
+                  : 'bg-emerald-50 hover:bg-emerald-100 text-[#1B4332] border border-emerald-200'
+              }`}
+            >
+              <Mic className={`w-3.5 h-3.5 ${isVoiceActive ? 'text-white' : 'text-emerald-700'}`} />
+              <span className="hidden sm:inline">{isVoiceActive ? 'Voice Active' : 'Voice Commands'}</span>
+            </button>
           )}
 
           {onOpenClearCache && (

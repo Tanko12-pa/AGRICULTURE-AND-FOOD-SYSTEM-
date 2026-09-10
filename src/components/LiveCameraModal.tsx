@@ -22,12 +22,13 @@ import {
   Sun,
   SlidersHorizontal,
 } from 'lucide-react';
-import { ConnectedCameraStream } from '../types';
+import { ConnectedCameraStream, GpsCoordinates } from '../types';
 
 interface LiveCameraModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCaptureImage: (base64Image: string) => void;
+  gpsCoordinates?: GpsCoordinates | null;
 }
 
 const CONNECTED_CAMERA_STREAMS: ConnectedCameraStream[] = [
@@ -114,7 +115,12 @@ const CONNECTED_CAMERA_STREAMS: ConnectedCameraStream[] = [
   },
 ];
 
-export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({ isOpen, onClose, onCaptureImage }) => {
+export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({
+  isOpen,
+  onClose,
+  onCaptureImage,
+  gpsCoordinates,
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -245,6 +251,12 @@ export const LiveCameraModal: React.FC<LiveCameraModalProps> = ({ isOpen, onClos
         20,
         66
       );
+
+      if (gpsCoordinates) {
+        ctx.fillStyle = '#6EE7B7';
+        ctx.font = 'bold 11px monospace';
+        ctx.fillText(`GPS FIX: ${gpsCoordinates.formatted} (±${gpsCoordinates.accuracy ?? 3.5}m)`, 20, 84);
+      }
 
       const base64 = canvas.toDataURL('image/jpeg', 0.94);
       onCaptureImage(base64);

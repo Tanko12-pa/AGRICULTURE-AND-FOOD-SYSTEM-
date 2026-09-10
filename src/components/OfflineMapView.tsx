@@ -21,8 +21,24 @@ import {
   Clock,
   Send,
   Eye,
+  CloudSun,
+  Droplets,
+  Wind,
+  Thermometer,
 } from 'lucide-react';
-import { CachedFieldObservation, SyncAuditLogItem } from '../types';
+import {
+  CachedFieldObservation,
+  SyncAuditLogItem,
+  GpsCoordinates,
+  HyperLocalWeather,
+} from '../types';
+import { useGeolocation } from '../hooks/useGeolocation';
+import {
+  fetchHyperLocalWeather,
+  getStoredHyperLocalWeather,
+} from '../services/weatherService';
+import { HyperLocalWeatherLayer } from './HyperLocalWeatherLayer';
+import { HyperLocalWeatherCard } from './HyperLocalWeatherCard';
 
 const STORAGE_KEY_OBSERVATIONS = 'agri_cached_field_observations_v1';
 const STORAGE_KEY_SYNC_LOG = 'agri_sync_audit_log_v1';
@@ -68,10 +84,77 @@ const INITIAL_GEO_PINS: CachedFieldObservation[] = [
   },
 ];
 
-export const OfflineMapView: React.FC = () => {
+export interface OfflineMapViewProps {
+  gpsCoordinates?: GpsCoordinates | null;
+  onRefreshGps?: () => void | Promise<any>;
+}
+
+export const OfflineMapView: React.FC<OfflineMapViewProps> = ({
+  gpsCoordinates: propGpsCoordinates,
+  onRefreshGps: propOnRefreshGps,
+}) => {
   const [isCached, setIsCached] = useState(true);
   const [selectedZone, setSelectedZone] = useState('Zone-A');
-  const [mapLayer, setMapLayer] = useState<'ndvi' | 'rgb' | 'thermal'>('ndvi');
+  const [mapLayer, setMapLayer] = useState<'ndvi' | 'rgb' | 'thermal' | 'weather'>('ndvi');
+  const [weatherOverlayActive, setWeatherOverlayActive] = useState<boolean>(true);
+  const [sidebarTab, setSidebarTab] = useState<'parcel' | 'weather'>('parcel');
+
+  // Device Geolocation Hook as local source/fallback
+  const { coordinates: hookGpsCoords, captureLocation, isCapturing: isGpsCapturing } = useGeolocation();
+  const effectiveGpsCoords = propGpsCoordinates || hookGpsCoords || {
+    latitude: 38.5449,
+    longitude: -121.7405,
+    accuracy: 3.5,
+    altitude: 16.2,
+    timestamp: Date.now(),
+    formatted: '38.5449° N, 121.7405° W',
+    sectorHint: 'North Quadrant Zone 4B (Sector 12)',
+    isFallback: true,
+  };
+
+  // Real-time hyper-local weather condition state
+  const [weather, setWeather] = useState<HyperLocalWeather | null>(() => getStoredHyperLocalWeather());
+  const [isWeatherLoading, setIsWeatherLoading] = useState<boolean>(false);
+  const [tempUnit, setTempUnit] = useState<'C' | 'F'>('C');
+  const [showWindVectors, setShowWindVectors] = useState<boolean>(true);
+  const [isWeatherHudExpanded, setIsWeatherHudExpanded] = useState<boolean>(true);
+
+  // Load hyper-local weather conditions based on current GPS coordinates
+  const loadHyperLocalWeather = async (targetCoords?: { latitude: number; longitude: number }) => {
+    setIsWeatherLoading(true);
+    try {
+      const lat = targetCoords?.latitude ?? effectiveGpsCoords.latitude;
+      const lng = targetCoords?.longitude ?? effectiveGpsCoords.longitude;
+      const data = await fetchHyperLocalWeather(lat, lng);
+      setWeather(data);
+    } catch (err) {
+      console.warn('Weather fetch caught in OfflineMapView:', err);
+    } finally {
+      setIsWeatherLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (effectiveGpsCoords?.latitude && effectiveGpsCoords?.longitude) {
+      loadHyperLocalWeather({
+        latitude: effectiveGpsCoords.latitude,
+        longitude: effectiveGpsCoords.longitude,
+      });
+    }
+  }, [effectiveGpsCoords?.latitude, effectiveGpsCoords?.longitude]);
+
+  const handleRefreshGpsAndWeather = async () => {
+    if (propOnRefreshGps) {
+      await propOnRefreshGps();
+    } else {
+      const fresh = await captureLocation();
+      if (fresh) {
+        await loadHyperLocalWeather({ latitude: fresh.latitude, longitude: fresh.longitude });
+        return;
+      }
+    }
+    await loadHyperLocalWeather();
+  };
 
   // Stored Observations & Geo-pins
   const [observations, setObservations] = useState<CachedFieldObservation[]>(() => {
@@ -577,6 +660,33 @@ export const OfflineMapView: React.FC = () => {
               <div className="absolute inset-0 bg-gradient-to-tr from-emerald-600/35 via-transparent to-amber-500/20 mix-blend-color-dodge pointer-events-none" />
             )}
 
+            {/* Simulated False Color Thermal Overlay if selected */}
+            {mapLayer === 'thermal' && (
+              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-950/60 via-purple-700/30 to-amber-500/35 mix-blend-color-dodge pointer-events-none" />
+            )}
+
+            {/* Atmospheric Weather Radar Backdrop if selected */}
+            {mapLayer === 'weather' && (
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-900/35 via-blue-900/25 to-slate-900/40 mix-blend-multiply pointer-events-none" />
+            )}
+
+            {/* REAL-TIME HYPER-LOCAL WEATHER CONDITIONS LAYER (Temperature, Humidity, Wind Speed) */}
+            {(weatherOverlayActive || mapLayer === 'weather') && (
+              <HyperLocalWeatherLayer
+                weather={weather}
+                isLoading={isWeatherLoading}
+                gpsCoordinates={effectiveGpsCoords}
+                onRefreshWeather={() => loadHyperLocalWeather()}
+                onRefreshGps={handleRefreshGpsAndWeather}
+                unit={tempUnit}
+                onToggleUnit={() => setTempUnit(tempUnit === 'C' ? 'F' : 'C')}
+                showWindVectors={showWindVectors}
+                onToggleWindVectors={() => setShowWindVectors(!showWindVectors)}
+                isExpanded={isWeatherHudExpanded}
+                onToggleExpanded={() => setIsWeatherHudExpanded(!isWeatherHudExpanded)}
+              />
+            )}
+
             {/* Drone Waypoint Path Overlay */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none">
               <path
@@ -703,30 +813,62 @@ export const OfflineMapView: React.FC = () => {
             </div>
 
             {/* Map Layer Selector Controls */}
-            <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/70 backdrop-blur-md p-1 rounded-xl border border-white/20 text-xs font-mono z-10">
+            <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/75 backdrop-blur-md p-1 rounded-xl border border-white/20 text-xs font-mono z-30">
               <button
+                id="map-layer-ndvi-btn"
                 onClick={() => setMapLayer('ndvi')}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
+                className={`px-2 py-1 rounded-lg transition-all ${
                   mapLayer === 'ndvi' ? 'bg-[#1B4332] text-white font-bold' : 'text-gray-300 hover:text-white'
                 }`}
               >
-                NDVI Index
+                NDVI
               </button>
               <button
+                id="map-layer-rgb-btn"
                 onClick={() => setMapLayer('rgb')}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
+                className={`px-2 py-1 rounded-lg transition-all ${
                   mapLayer === 'rgb' ? 'bg-[#1B4332] text-white font-bold' : 'text-gray-300 hover:text-white'
                 }`}
               >
-                True RGB
+                RGB
               </button>
               <button
+                id="map-layer-thermal-btn"
                 onClick={() => setMapLayer('thermal')}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
+                className={`px-2 py-1 rounded-lg transition-all ${
                   mapLayer === 'thermal' ? 'bg-[#1B4332] text-white font-bold' : 'text-gray-300 hover:text-white'
                 }`}
               >
-                Thermal IR
+                Thermal
+              </button>
+              <button
+                id="map-layer-weather-btn"
+                onClick={() => {
+                  setMapLayer('weather');
+                  setWeatherOverlayActive(true);
+                }}
+                className={`px-2 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                  mapLayer === 'weather' ? 'bg-sky-600 text-white font-bold' : 'text-gray-300 hover:text-white'
+                }`}
+                title="Atmospheric Weather Radar View"
+              >
+                <CloudSun className="w-3.5 h-3.5 text-sky-400" />
+                <span>Weather</span>
+              </button>
+              <div className="w-[1px] h-3.5 bg-white/25 mx-0.5" />
+              <button
+                id="map-toggle-weather-layer-btn"
+                onClick={() => setWeatherOverlayActive(!weatherOverlayActive)}
+                className={`px-2 py-1 rounded-lg transition-all text-[11px] font-bold flex items-center gap-1 border ${
+                  weatherOverlayActive
+                    ? 'bg-sky-500/30 text-sky-200 border-sky-400/50 shadow-xs'
+                    : 'bg-white/5 text-gray-400 border-white/10 hover:text-white'
+                }`}
+                title="Toggle Real-Time Hyper-Local Weather Layer (Temperature, Humidity, Wind Speed)"
+              >
+                <Wind className="w-3 h-3 text-teal-300" />
+                <span className="hidden sm:inline">Layer:</span>
+                <span>{weatherOverlayActive ? 'ON' : 'OFF'}</span>
               </button>
             </div>
 
@@ -808,7 +950,45 @@ export const OfflineMapView: React.FC = () => {
 
         {/* Selected Zone or Pin Inspection Telemetry (4 Cols) */}
         <div className="lg:col-span-4 space-y-4">
-          {selectedPinForInspect ? (
+          {/* Side Panel Tabs: Geofenced Parcel vs Real-Time Hyper-Local Weather */}
+          <div className="flex items-center gap-1.5 p-1 bg-gray-100/90 rounded-xl border border-gray-200 text-xs font-mono">
+            <button
+              id="tab-parcel-telemetry-btn"
+              onClick={() => setSidebarTab('parcel')}
+              className={`flex-1 py-1.5 px-2 rounded-lg font-bold transition-all text-center ${
+                sidebarTab === 'parcel'
+                  ? 'bg-white text-gray-900 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Parcel Telemetry
+            </button>
+            <button
+              id="tab-hyperlocal-weather-btn"
+              onClick={() => setSidebarTab('weather')}
+              className={`flex-1 py-1.5 px-2 rounded-lg font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
+                sidebarTab === 'weather'
+                  ? 'bg-white text-sky-900 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              <CloudSun className="w-3.5 h-3.5 text-sky-600" />
+              <span>Weather (GPS)</span>
+            </button>
+          </div>
+
+          {sidebarTab === 'weather' ? (
+            /* Dedicated Hyper-Local Weather & Microclimate Analysis Card */
+            <HyperLocalWeatherCard
+              weather={weather}
+              isLoading={isWeatherLoading}
+              gpsCoordinates={effectiveGpsCoords}
+              onRefreshWeather={() => loadHyperLocalWeather()}
+              onRefreshGps={handleRefreshGpsAndWeather}
+              unit={tempUnit}
+              onToggleUnit={() => setTempUnit(tempUnit === 'C' ? 'F' : 'C')}
+            />
+          ) : selectedPinForInspect ? (
             /* Selected Dropped Pin Details */
             <div className="p-5 rounded-2xl bg-white border border-emerald-300 shadow-sm space-y-4 text-gray-900 animate-in fade-in">
               <div className="flex items-center justify-between pb-2 border-b border-gray-100">

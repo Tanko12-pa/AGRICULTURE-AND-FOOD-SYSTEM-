@@ -19,6 +19,7 @@ import {
 import { CropAnalysisResult, PestDetectionResult, QualityInspectionResult, ActiveTab } from '../types';
 import { generateStructuredAuditPdf } from '../utils/pdfReportGenerator';
 import { TelemetryTooltip } from './TelemetryTooltip';
+import { CropPestTrendD3Chart } from './CropPestTrendD3Chart';
 
 interface OverviewPipelineViewProps {
   cropData: CropAnalysisResult;
@@ -442,6 +443,12 @@ export const OverviewPipelineView: React.FC<OverviewPipelineViewProps> = ({
           </div>
         </motion.div>
       </div>
+
+      {/* 30-Day Crop Health & Pest Severity Temporal Dynamics (D3.js Line Visualization) */}
+      <CropPestTrendD3Chart
+        currentCropHealth={cropData.healthScore}
+        currentPestSeverity={pestData.severityIndex}
+      />
 
       {/* Real-time System Metrics Bar (High Density Theme) */}
       <div className="p-4 rounded-2xl bg-white border border-gray-200/80 shadow-sm flex items-center justify-between flex-wrap gap-4 text-xs font-mono text-gray-700">

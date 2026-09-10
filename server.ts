@@ -45,8 +45,27 @@ function getGeminiClient(): GoogleGenAI {
 }
 
 // Resilient fallback order per official gemini-api skill specifications:
-// If the primary model experiences transient spikes/503s or quota limits, automatically fall over to independent models.
-const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
+// If a model experiences quota limits (such as resource_exhausted) or transient latency,
+// automatically fall over to independent models with separate quota allocations.
+const GEMINI_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+const exhaustedModels = new Map<string, number>(); // model -> timestamp of exhaustion
+
+function getEligibleGeminiModels(): string[] {
+  const now = Date.now();
+  // Clear any exhaustion older than 5 minutes
+  for (const [model, time] of exhaustedModels.entries()) {
+    if (now - time > 5 * 60 * 1000) {
+      exhaustedModels.delete(model);
+    }
+  }
+
+  // Sort available non-exhausted models first
+  return [...GEMINI_MODELS].sort((a, b) => {
+    const aExhausted = exhaustedModels.has(a) ? 1 : 0;
+    const bExhausted = exhaustedModels.has(b) ? 1 : 0;
+    return aExhausted - bExhausted;
+  });
+}
 
 function extractJsonFromText(rawText: string): any {
   if (!rawText) return null;
@@ -89,8 +108,9 @@ async function callGeminiGenerate<T = any>(options: {
 }): Promise<GenerateResult<T>> {
   const gemini = getGeminiClient();
   let lastErr: any = null;
+  const modelsToTry = getEligibleGeminiModels();
 
-  for (const model of GEMINI_MODELS) {
+  for (const model of modelsToTry) {
     try {
       const response: any = await Promise.race([
         gemini.models.generateContent({
@@ -99,7 +119,7 @@ async function callGeminiGenerate<T = any>(options: {
           config: options.config,
         }),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`Model ${model} request timed out`)), 5500)
+          setTimeout(() => reject(new Error(`Model ${model} request timed out`)), 18000)
         ),
       ]);
 
@@ -124,7 +144,12 @@ async function callGeminiGenerate<T = any>(options: {
       };
     } catch (err: any) {
       lastErr = err;
-      // Immediately fallback to next model in GEMINI_MODELS
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('resource_exhausted') || errMsg.includes('quota') || errMsg.includes('429')) {
+        console.warn(`[Gemini Quota Exceeded] Flagging ${model} as exhausted:`, errMsg);
+        exhaustedModels.set(model, Date.now());
+      }
+      // Continue to next available model in GEMINI_MODELS
     }
   }
 
@@ -787,9 +812,10 @@ Your expertise encompasses:
 Always interpret the active vision telemetry provided in the context. Provide authoritative, highly practical, deeply structured advice formatted with clean markdown, clear section headers, and actionable steps.`;
 
     let replyText: string | null = null;
-    let modelUsed = 'gemini-3.8-flash';
+    let modelUsed = 'gemini-3.1-flash-lite';
+    const modelsToTry = getEligibleGeminiModels();
 
-    for (const model of GEMINI_MODELS) {
+    for (const model of modelsToTry) {
       try {
         const chat = gemini.chats.create({
           model,
@@ -813,7 +839,7 @@ Always interpret the active vision telemetry provided in the context. Provide au
             message: fullMessageWithContext,
           }),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Chat model ${model} timed out`)), 5500)
+            setTimeout(() => reject(new Error(`Chat model ${model} timed out`)), 18000)
           ),
         ]);
 
@@ -823,6 +849,11 @@ Always interpret the active vision telemetry provided in the context. Provide au
           break;
         }
       } catch (chatErr: any) {
+        const errMsg = chatErr?.message || String(chatErr);
+        if (errMsg.includes('resource_exhausted') || errMsg.includes('quota') || errMsg.includes('429')) {
+          console.warn(`[Gemini Chat Quota Exceeded] Flagging ${model} as exhausted:`, errMsg);
+          exhaustedModels.set(model, Date.now());
+        }
         // Fallback to next model
       }
     }
