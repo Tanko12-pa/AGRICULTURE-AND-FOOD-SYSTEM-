@@ -14,6 +14,7 @@ import {
   Layers,
   Plane,
   ShieldCheck,
+  CloudRain,
 } from 'lucide-react';
 import { HyperLocalWeather, GpsCoordinates } from '../types';
 
@@ -99,8 +100,8 @@ export const HyperLocalWeatherCard: React.FC<HyperLocalWeatherCardProps> = ({
         </div>
       </div>
 
-      {/* 3 Prominent Condition Gauges: Temperature, Humidity, Wind Speed */}
-      <div className="grid grid-cols-3 gap-2.5">
+      {/* 4 Prominent Condition Gauges: Temperature, Humidity, Precipitation Chance, Wind Speed */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {/* 1. TEMPERATURE */}
         <div className="p-3 rounded-xl bg-[#F0FDF4] border border-emerald-200 flex flex-col justify-between">
           <div className="flex items-center justify-between text-[11px] font-mono text-emerald-800 font-semibold">
@@ -139,7 +140,26 @@ export const HyperLocalWeatherCard: React.FC<HyperLocalWeatherCardProps> = ({
           </div>
         </div>
 
-        {/* 3. WIND SPEED */}
+        {/* 3. PRECIPITATION CHANCE */}
+        <div className="p-3 rounded-xl bg-[#F5F3FF] border border-purple-200 flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[11px] font-mono text-purple-800 font-semibold">
+            <span className="flex items-center gap-1">
+              <CloudRain className="w-3.5 h-3.5 text-purple-600" />
+              <span>Rain Chance</span>
+            </span>
+          </div>
+          <div className="my-1 text-center">
+            <span className="text-xl font-bold font-mono text-purple-950">
+              {weather.precipitationChance ?? 0}
+            </span>
+            <span className="text-xs font-mono text-purple-700 ml-0.5">%</span>
+          </div>
+          <div className="text-[10px] font-mono text-purple-700 text-center">
+            {weather.precipitationMm > 0 ? `${weather.precipitationMm} mm/h` : '0 mm/h'}
+          </div>
+        </div>
+
+        {/* 4. WIND SPEED */}
         <div className="p-3 rounded-xl bg-[#F8FAFC] border border-slate-200 flex flex-col justify-between">
           <div className="flex items-center justify-between text-[11px] font-mono text-slate-700 font-semibold">
             <span className="flex items-center gap-1">

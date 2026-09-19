@@ -1,6 +1,6 @@
 {
   "name": "AGRICULTURE & FOOD SYSTEM",
-  "description": "A unified computer vision platform for agriculture and food systems featuring crop monitoring, pest detection, food quality inspection, and A2A judge diagnostics.",
+  "description": "A unified computer vision and AI software development platform featuring crop monitoring, pest detection, food quality inspection, real-time hyper-local climate and crop disease outbreak correlation, and enterprise data-to-decision transformation solutions.",
   "requestFramePermissions": ["camera", "microphone", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

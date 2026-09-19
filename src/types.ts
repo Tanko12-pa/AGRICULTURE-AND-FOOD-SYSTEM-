@@ -1,4 +1,4 @@
-export type ActiveTab = 'overview' | 'mobile-dash' | 'crop' | 'pest' | 'quality' | 'a2a' | 'chat' | 'datasets' | 'map' | 'billing';
+export type ActiveTab = 'overview' | 'mobile-dash' | 'crop' | 'pest' | 'quality' | 'a2a' | 'chat' | 'datasets' | 'map' | 'billing' | 'solutions';
 
 export type UserRole = 'FIELD_TECH' | 'AGRI_SUPERVISOR' | 'QUALITY_INSPECTOR' | 'SYSTEM_ADMIN';
 
@@ -54,6 +54,37 @@ export interface HyperLocalHourlyPoint {
   temperatureC: number;
   humidity: number;
   windSpeedKmh: number;
+  precipitationChance?: number;
+}
+
+export interface DiseaseOutbreakRiskFactor {
+  disease: string;
+  pathogen: string;
+  targetCrop: string;
+  riskScore: number; // 0-100
+  riskLevel: 'Low' | 'Moderate' | 'High' | 'Critical';
+  triggerMechanism: string;
+  correlationExplanation: string;
+  recommendedAction: string;
+  urgency: 'Routine' | 'Within 24 Hours' | 'Immediate Action';
+}
+
+export interface DroneSprayAdvisory {
+  status: 'OPTIMAL' | 'CAUTION' | 'RESTRICTED';
+  windSpeedKmh: number;
+  windSpeedMph: number;
+  windSpeedMps: number;
+  windGustKmh: number;
+  windDirectionCompass: string;
+  driftRiskLevel: 'Low' | 'Moderate' | 'High' | 'Severe';
+  title: string;
+  warningNotice?: string;
+  recommendation: string;
+  maxRecommendedSpeedKmh: number;
+  isImpacted: boolean;
+  flightSafetyScore: number; // 0 - 100
+  nozzleSuggestion: string;
+  maxFlightAltitudeMeters: number;
 }
 
 export interface HyperLocalWeather {
@@ -62,9 +93,12 @@ export interface HyperLocalWeather {
   temperatureC: number;
   temperatureF: number;
   humidity: number; // percentage 0-100
+  precipitationChance: number; // percentage 0-100 (real-time hyper-local precipitation chance)
   windSpeedKmh: number;
   windSpeedMps: number;
   windSpeedMph: number;
+  windGustKmh?: number;
+  windGustMph?: number;
   windDirectionDeg: number;
   windDirectionCompass: string;
   apparentTemperatureC: number;
@@ -74,11 +108,17 @@ export interface HyperLocalWeather {
   precipitationMm: number;
   sprayCondition: 'Optimal' | 'Caution' | 'Warning' | 'Unfavorable';
   sprayConditionSummary: string;
+  droneSprayAdvisory?: DroneSprayAdvisory;
   leafWetnessRisk: 'Low' | 'Moderate' | 'High';
   lastUpdated: string;
   source: string;
   isOfflineCached?: boolean;
   hourlyForecast?: HyperLocalHourlyPoint[];
+  diseaseCorrelations?: DiseaseOutbreakRiskFactor[];
+  overallOutbreakRiskScore?: number;
+  overallOutbreakRiskLevel?: 'Low' | 'Moderate' | 'High' | 'Critical';
+  leafWetnessHours?: number;
+  soilTemperatureC?: number;
 }
 
 export interface CropPestHistoricalTrendPoint {
@@ -543,5 +583,77 @@ export interface SyncAuditLogItem {
   clientDeviceId: string;
   notes: string;
 }
+
+// ==========================================
+// ENTERPRISE AI & SOFTWARE DEVELOPMENT TYPES
+// ==========================================
+
+export type IndustrySectorKey = 'healthcare' | 'insurance' | 'retail' | 'manufacturing' | 'agriculture' | 'finance';
+
+export type SoftwarePillarKey = 'industry-specific' | 'custom-business' | 'ai-integration' | 'mobile-apps';
+
+export interface AiDecisionTransformationRequest {
+  industry: string;
+  businessGoal: string;
+  dataSummary: string;
+  currentChallenges?: string;
+  selectedPillars?: string[];
+}
+
+export interface AiPracticalUseCase {
+  title: string;
+  description: string;
+  mlParadigm: string;
+  impact: 'High' | 'Transformational' | 'Critical';
+  estimatedRoi: string;
+  timeToProduction: string;
+}
+
+export interface AutomatedDecisionWorkflow {
+  triggerEvent: string;
+  aiEvaluationEngine: string;
+  automatedAction: string;
+  humanOversightLevel: string;
+}
+
+export interface PredictiveAnalyticsForesight {
+  kpi: string;
+  baselineValue: string;
+  projectedValue: string;
+  foresightHorizon: string;
+  confidencePercent: number;
+  riskMitigation: string;
+}
+
+export interface AiDecisionTransformationResult {
+  id: string;
+  timestamp: string;
+  industry: string;
+  executiveSummary: string;
+  modernDataFoundation: {
+    lakehouseArchitecture: string;
+    storageEngines: string[];
+    ingestionPipelines: string;
+    governanceAndCompliance: string[];
+  };
+  practicalAiUseCases: AiPracticalUseCase[];
+  automatedDecisions: AutomatedDecisionWorkflow[];
+  predictiveAnalyticsForesight: PredictiveAnalyticsForesight[];
+  customSoftwareArchitecture: {
+    crmModules: string[];
+    ecommerceCapabilities: string[];
+    crossPlatformStack: string[];
+    cloudNativeServices: string[];
+  };
+  mobileDevelopmentBlueprint: {
+    recommendedFramework: string;
+    nativeFeatures: string[];
+    offlineCapabilities: string[];
+    uxBestPractices: string[];
+  };
+  complianceFrameworks: string[];
+  modelUsed?: string;
+}
+
 
 

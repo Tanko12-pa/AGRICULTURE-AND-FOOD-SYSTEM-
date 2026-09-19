@@ -48,6 +48,7 @@ import { PushNotificationToast } from './components/PushNotificationToast';
 import { VisionTelemetryToolbar } from './components/VisionTelemetryToolbar';
 import { SubscriptionBillingView } from './components/SubscriptionBillingView';
 import { SubscriptionGateModal } from './components/SubscriptionGateModal';
+import { SoftwareSolutionsView } from './components/SoftwareSolutionsView';
 import { generateStructuredAuditPdf } from './utils/pdfReportGenerator';
 import { VoiceCommandAssistant } from './components/VoiceCommandAssistant';
 import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './components/OnboardingTour';
@@ -780,6 +781,8 @@ export default function App() {
                 ? 'Offline GIS Map & NDVI'
                 : activeTab === 'mobile-dash'
                 ? 'Mobile & Field Dashboard'
+                : activeTab === 'solutions'
+                ? 'AI Software Development & Enterprise Solutions'
                 : activeTab}
             </span>
             <span className="hidden sm:inline text-gray-300">|</span>
@@ -858,6 +861,12 @@ export default function App() {
                 onBatchAcknowledgeNotifications={handleBatchAcknowledgeNotifications}
                 onDismissNotification={handleDismissNotification}
                 onMarkNotificationRead={handleMarkNotificationRead}
+                onAddNotification={(newAlert) => {
+                  setNotifications((prev) => {
+                    if (prev.some((n) => n.id === newAlert.id)) return prev;
+                    return [newAlert, ...prev];
+                  });
+                }}
                 isAnalyzing={isAnalyzing}
                 isOffline={isOffline}
                 onToggleOffline={() => setIsOffline(!isOffline)}
@@ -911,6 +920,13 @@ export default function App() {
               <OfflineMapView
                 gpsCoordinates={lastGpsCoords}
                 onRefreshGps={captureLocation}
+              />
+            )}
+
+            {activeTab === 'solutions' && (
+              <SoftwareSolutionsView
+                onNavigateTab={setActiveTab}
+                onOpenChatWithPrompt={handleOpenChatWithPrompt}
               />
             )}
           </motion.div>

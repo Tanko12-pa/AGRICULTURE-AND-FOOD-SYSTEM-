@@ -25,6 +25,7 @@ import {
   Trash2,
   FileText,
   Mic,
+  Code2,
 } from 'lucide-react';
 import { ActiveTab, UserRole, AuthUser } from '../types';
 
@@ -308,6 +309,34 @@ export const LeftControlPanel: React.FC<LeftControlPanelProps> = ({
             <span className="flex-1">Agronomist AI Consult</span>
             <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#153427] text-[#D4A373] font-mono border border-[#2D5A27]">
               Gemini
+            </span>
+          </button>
+        </div>
+
+        {/* SECTION: ENTERPRISE AI & SOFTWARE SUITE */}
+        <div className="pt-2">
+          <div className="px-2 text-[10px] font-semibold text-[#D4A373] uppercase tracking-widest opacity-90 font-mono mb-1.5 flex items-center justify-between">
+            <span>Enterprise Suite</span>
+            <span className="text-[9px] text-cyan-300 font-mono font-bold">AI DEV</span>
+          </div>
+
+          <button
+            id="btn-tab-solutions"
+            onClick={() => setActiveTab('solutions')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left group ${
+              activeTab === 'solutions'
+                ? 'bg-[#2D5A27] text-white border border-[#447A3C] shadow-sm font-semibold'
+                : 'text-white/85 hover:bg-[#2D5A27]/60 hover:text-white border border-transparent'
+            }`}
+          >
+            {activeTab === 'solutions' ? (
+              <div className="w-2 h-2 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.8)] shrink-0" />
+            ) : (
+              <Code2 className="w-3.5 h-3.5 shrink-0 text-cyan-300 group-hover:text-white" />
+            )}
+            <span className="flex-1">AI Software Development</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#153427] text-cyan-300 font-mono border border-[#2D5A27]">
+              4 Pillars
             </span>
           </button>
         </div>

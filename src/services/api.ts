@@ -1,4 +1,12 @@
-import { CropAnalysisResult, PestDetectionResult, QualityInspectionResult, A2AJudgeResult, OfflineSyncQueueItem } from '../types';
+import {
+  CropAnalysisResult,
+  PestDetectionResult,
+  QualityInspectionResult,
+  A2AJudgeResult,
+  OfflineSyncQueueItem,
+  AiDecisionTransformationRequest,
+  AiDecisionTransformationResult,
+} from '../types';
 import {
   validateCropAnalysis,
   validatePestDetection,
@@ -367,4 +375,27 @@ export async function getWeatherForecast(location = 'Sector 4 - South Valley Far
     };
   }
 }
+
+export async function transformDataToDecisions(
+  payload: AiDecisionTransformationRequest
+): Promise<{ success: boolean; data: AiDecisionTransformationResult; source?: string; error?: string }> {
+  try {
+    const response = await fetch('/api/solutions/transform-data-to-decisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    return json;
+  } catch (err: any) {
+    console.error('Error calling /api/solutions/transform-data-to-decisions:', err);
+    throw err;
+  }
+}
+
 

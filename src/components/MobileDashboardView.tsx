@@ -56,7 +56,9 @@ import {
   ActiveTab,
   CachedFieldObservation,
   SyncAuditLogItem,
+  HyperLocalWeather,
 } from '../types';
+import { getStoredHyperLocalWeather } from '../services/weatherService';
 import { PredictiveYieldChart } from './PredictiveYieldChart';
 import { MiniWeatherOverlay } from './MiniWeatherOverlay';
 import { CropBiomassHeatmapOverlay } from './CropBiomassHeatmapOverlay';
@@ -64,6 +66,7 @@ import { GrowthSnapshotLogger } from './GrowthSnapshotLogger';
 import { GeminiPestForecastCard } from './GeminiPestForecastCard';
 import { WeeklyCropGrowthChart } from './WeeklyCropGrowthChart';
 import { DroneControlModal } from './DroneControlModal';
+import { HyperLocalClimateOutbreakCard } from './HyperLocalClimateOutbreakCard';
 
 interface MobileDashboardViewProps {
   cropData: CropAnalysisResult;
@@ -79,6 +82,7 @@ interface MobileDashboardViewProps {
   onBatchAcknowledgeNotifications?: (ids: string[]) => void;
   onDismissNotification?: (id: string) => void;
   onMarkNotificationRead?: (id: string) => void;
+  onAddNotification?: (notification: AlertNotification) => void;
   isAnalyzing: boolean;
   isOffline?: boolean;
   onToggleOffline?: () => void;
@@ -202,10 +206,13 @@ export const MobileDashboardView: React.FC<MobileDashboardViewProps> = ({
   onBatchAcknowledgeNotifications,
   onDismissNotification,
   onMarkNotificationRead,
+  onAddNotification,
   isAnalyzing,
   isOffline = false,
   onToggleOffline,
 }) => {
+  const [activeCautionWeatherAlert, setActiveCautionWeatherAlert] = useState<AlertNotification | null>(null);
+
   const [pushStatus, setPushStatus] = useState<'default' | 'granted' | 'denied'>(
     typeof window !== 'undefined' && 'Notification' in window
       ? (Notification.permission as any)
@@ -273,6 +280,38 @@ export const MobileDashboardView: React.FC<MobileDashboardViewProps> = ({
   const [activeSyncHubTab, setActiveSyncHubTab] = useState<'observations' | 'sync_log'>('observations');
   const [syncLogFilter, setSyncLogFilter] = useState<'all' | 'success' | 'failed'>('all');
   const [isDroneModalOpen, setIsDroneModalOpen] = useState<boolean>(false);
+
+  // Weather Telemetry & Configurable Auto-Refresh (5, 15, 30 min updates for climate telemetry)
+  const [weatherData, setWeatherData] = useState<HyperLocalWeather | null>(() => getStoredHyperLocalWeather());
+  const [weatherAutoRefreshMinutes, setWeatherAutoRefreshMinutes] = useState<5 | 15 | 30>(15);
+  const [weatherRefreshTrigger, setWeatherRefreshTrigger] = useState<number>(0);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(15 * 60);
+
+  // Reset countdown whenever auto-refresh interval changes
+  useEffect(() => {
+    setCountdownSeconds(weatherAutoRefreshMinutes * 60);
+  }, [weatherAutoRefreshMinutes]);
+
+  // Interval timer for climate telemetry auto-refresh countdown
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdownSeconds((prev) => {
+        if (prev <= 1) {
+          // Trigger automated climate telemetry update
+          setWeatherRefreshTrigger((c) => c + 1);
+          return weatherAutoRefreshMinutes * 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [weatherAutoRefreshMinutes]);
+
+  const handleManualWeatherRefresh = () => {
+    setWeatherRefreshTrigger((c) => c + 1);
+    setCountdownSeconds(weatherAutoRefreshMinutes * 60);
+  };
 
   // Sync state calculation
   const pendingObservations = observations.filter((o) => o.syncStatus === 'pending');
@@ -1355,6 +1394,280 @@ export const MobileDashboardView: React.FC<MobileDashboardViewProps> = ({
           </button>
         </div>
       )}
+
+      {/* VISUAL INDICATOR: DRONE SPRAY WIND IMPACT ADVISORY (Real-Time UAV Flight Telemetry) */}
+      {(() => {
+        const droneSprayAdvisory = weatherData?.droneSprayAdvisory;
+        const windSpeedKmh = weatherData?.windSpeedKmh ?? 8.4;
+        const windSpeedMph = weatherData?.windSpeedMph ?? Math.round(windSpeedKmh * 0.621371 * 10) / 10;
+        const windGustKmh = weatherData?.windGustKmh ?? Math.round(windSpeedKmh * 1.35 * 10) / 10;
+        const windDirectionCompass = weatherData?.windDirectionCompass ?? 'SW';
+        const windDirectionDeg = weatherData?.windDirectionDeg ?? 215;
+
+        const isDroneRestricted = droneSprayAdvisory?.status === 'RESTRICTED' || windSpeedKmh > 18;
+        const isDroneCaution = !isDroneRestricted && (droneSprayAdvisory?.status === 'CAUTION' || windSpeedKmh > 12);
+
+        return (
+          <div
+            id="drone-spray-wind-advisory-indicator"
+            className={`rounded-2xl border p-4 sm:p-5 shadow-sm transition-all ${
+              isDroneRestricted
+                ? 'bg-[#FFF1F2] border-rose-300 ring-2 ring-rose-300/60'
+                : isDroneCaution
+                ? 'bg-[#FFFBEB] border-amber-300 ring-2 ring-amber-300/50'
+                : 'bg-[#F0FDF4] border-emerald-300'
+            }`}
+          >
+            <div
+              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b ${
+                isDroneRestricted
+                  ? 'border-rose-200'
+                  : isDroneCaution
+                  ? 'border-amber-200'
+                  : 'border-emerald-200'
+              }`}
+            >
+              <div className="flex items-start sm:items-center gap-3">
+                <div
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                    isDroneRestricted
+                      ? 'bg-rose-600 text-white animate-pulse'
+                      : isDroneCaution
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-[#1B4332] text-white'
+                  }`}
+                >
+                  {isDroneRestricted ? (
+                    <ShieldAlert className="w-6 h-6" />
+                  ) : isDroneCaution ? (
+                    <AlertTriangle className="w-6 h-6" />
+                  ) : (
+                    <Plane className="w-6 h-6" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-bold font-display text-gray-950">
+                      {isDroneRestricted
+                        ? 'UAV Drone Treatment Spray Grounded — High Wind Hazard'
+                        : isDroneCaution
+                        ? 'UAV Drone Spray Drift Caution — Elevated Wind Speed'
+                        : 'UAV Drone Spray Window Active — Optimal Wind Profile'}
+                    </h3>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold uppercase border ${
+                        isDroneRestricted
+                          ? 'bg-rose-100 text-rose-900 border-rose-300'
+                          : isDroneCaution
+                          ? 'bg-amber-100 text-amber-900 border-amber-300'
+                          : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                      }`}
+                    >
+                      {isDroneRestricted
+                        ? 'FLIGHT RESTRICTED'
+                        : isDroneCaution
+                        ? 'DRIFT CAUTION'
+                        : 'SAFE TO SPRAY'}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-xs mt-0.5 ${
+                      isDroneRestricted
+                        ? 'text-rose-900 font-medium'
+                        : isDroneCaution
+                        ? 'text-amber-900 font-medium'
+                        : 'text-emerald-900'
+                    }`}
+                  >
+                    {isDroneRestricted
+                      ? 'Wind speed exceeds aerodynamic threshold (18 km/h). Extreme off-target droplet drift and rotor vortex disruption.'
+                      : isDroneCaution
+                      ? 'Crosswinds approaching operational limit (12–18 km/h). Coarse droplets and reduced altitude mandatory.'
+                      : 'Light steady breeze (<12 km/h). Ideal rotor downwash canopy penetration with negligible drift risk.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Action Buttons for Drone Operations */}
+              <div className="flex items-center gap-2 self-start sm:self-center shrink-0 flex-wrap">
+                <button
+                  onClick={() => setIsDroneModalOpen(true)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-xs min-h-[44px] ${
+                    isDroneRestricted
+                      ? 'bg-rose-700 hover:bg-rose-800 text-white'
+                      : isDroneCaution
+                      ? 'bg-amber-700 hover:bg-amber-800 text-white'
+                      : 'bg-[#1B4332] hover:bg-[#2d6a4f] text-white'
+                  }`}
+                >
+                  <Plane className="w-3.5 h-3.5" />
+                  <span>{isDroneRestricted ? 'Open Drone Console' : 'Launch UAV Mission'}</span>
+                </button>
+                <button
+                  onClick={() =>
+                    onOpenChatWithPrompt(
+                      `DRONE SPRAY WIND ADVISORY CONSULTATION:\nStatus: ${
+                        isDroneRestricted ? 'RESTRICTED' : isDroneCaution ? 'CAUTION' : 'OPTIMAL'
+                      }\nWind Speed: ${windSpeedKmh} km/h (${windSpeedMph} mph)\nGusts: ${windGustKmh} km/h\nBearing: ${windDirectionDeg}° ${windDirectionCompass}\nCrop: ${
+                        cropData.cropType || 'Tomato'
+                      }\n\nWhat is the recommended nozzle micron rating, flight altitude limit, adjuvant drift retardant, and next calm application window?`
+                    )
+                  }
+                  className="px-3 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-mono font-medium flex items-center gap-1.5 transition-all shadow-xs min-h-[44px]"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Drift Guidance</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Telemetry Strip for Wind Conditions & Drone Spray Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3">
+              <div className="p-2.5 rounded-xl bg-white/85 border border-gray-200/80 shadow-2xs">
+                <span className="text-[10px] font-mono text-gray-500 uppercase block">Sustained Wind</span>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-lg font-bold font-mono text-gray-900">{windSpeedKmh}</span>
+                  <span className="text-xs font-mono text-gray-500">km/h ({windSpeedMph} mph)</span>
+                </div>
+                <span className="text-[10px] font-mono text-gray-400 block mt-0.5">Max Safe: 18.0 km/h</span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/85 border border-gray-200/80 shadow-2xs">
+                <span className="text-[10px] font-mono text-gray-500 uppercase block">Canopy Gusts</span>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-lg font-bold font-mono text-gray-900">{windGustKmh}</span>
+                  <span className="text-xs font-mono text-gray-500">km/h</span>
+                </div>
+                <span
+                  className={`text-[10px] font-mono block mt-0.5 ${
+                    windGustKmh > 24 ? 'text-rose-600 font-bold' : 'text-gray-400'
+                  }`}
+                >
+                  {windGustKmh > 24 ? 'Critical Gust Spikes' : 'Nominal Stability'}
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/85 border border-gray-200/80 shadow-2xs">
+                <span className="text-[10px] font-mono text-gray-500 uppercase block">Vector & Heading</span>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="text-lg font-bold font-mono text-gray-900">{windDirectionCompass}</span>
+                  <span className="text-xs font-mono text-gray-500">({windDirectionDeg}°)</span>
+                </div>
+                <span className="text-[10px] font-mono text-gray-400 block mt-0.5">
+                  {droneSprayAdvisory?.downwindBufferMeters
+                    ? `${droneSprayAdvisory.downwindBufferMeters}m Buffer Req`
+                    : 'Downwind Buffer: 30m'}
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/85 border border-gray-200/80 shadow-2xs">
+                <span className="text-[10px] font-mono text-gray-500 uppercase block">Flight Safety Index</span>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span
+                    className={`text-lg font-bold font-mono ${
+                      isDroneRestricted
+                        ? 'text-rose-700'
+                        : isDroneCaution
+                        ? 'text-amber-700'
+                        : 'text-emerald-700'
+                    }`}
+                  >
+                    {droneSprayAdvisory?.flightSafetyScore ?? (isDroneRestricted ? 18 : isDroneCaution ? 54 : 95)}/100
+                  </span>
+                </div>
+                <span
+                  className="text-[10px] font-mono text-gray-500 block mt-0.5 truncate"
+                  title={droneSprayAdvisory?.recommendedNozzleType || 'Standard Air Induction'}
+                >
+                  {droneSprayAdvisory?.recommendedNozzleType
+                    ? `Nozzle: ${droneSprayAdvisory.recommendedNozzleType.slice(0, 16)}...`
+                    : 'Air Induction (>350µm)'}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* CONFIGURABLE CLIMATE TELEMETRY AUTO-REFRESH TOOLBAR (5, 15, 30 min updates) */}
+      <div
+        id="climate-telemetry-autorefresh-bar"
+        className="rounded-2xl bg-white border border-gray-200/90 p-3 sm:p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 flex items-center justify-center shrink-0">
+            <Clock className="w-4 h-4 text-sky-600" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-900 font-display">
+                Climate Telemetry Auto-Refresh
+              </span>
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping" />
+                <span>ACTIVE ({weatherAutoRefreshMinutes}m)</span>
+              </span>
+            </div>
+            <p className="text-[11px] font-mono text-gray-500 mt-0.5 flex items-center gap-1">
+              <span>Next update in:</span>
+              <span className="font-bold text-sky-800">
+                {Math.floor(countdownSeconds / 60)}m {(countdownSeconds % 60).toString().padStart(2, '0')}s
+              </span>
+              <span className="text-gray-300">•</span>
+              <span>Open-Meteo RTK GPS</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap self-end sm:self-center">
+          <span className="text-[11px] font-mono text-gray-500 font-semibold hidden md:inline">
+            Update Interval:
+          </span>
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 text-xs font-mono">
+            {([5, 15, 30] as const).map((interval) => (
+              <button
+                key={interval}
+                id={`btn-interval-${interval}m`}
+                onClick={() => setWeatherAutoRefreshMinutes(interval)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  weatherAutoRefreshMinutes === interval
+                    ? 'bg-[#1B4332] text-white shadow-xs'
+                    : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200/70'
+                }`}
+                title={`Configure climate telemetry to auto-update every ${interval} minutes`}
+              >
+                {interval} Min
+              </button>
+            ))}
+          </div>
+
+          <button
+            id="btn-force-weather-refresh"
+            onClick={handleManualWeatherRefresh}
+            className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 active:scale-95 text-gray-700 text-xs font-mono font-semibold flex items-center gap-1.5 transition-all shadow-2xs min-h-[36px]"
+            title="Immediately fetch fresh hyper-local weather data from mock service"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-gray-600" />
+            <span>Sync Now</span>
+          </button>
+        </div>
+      </div>
+
+      {/* REAL-TIME HYPER-LOCAL CLIMATE & CROP DISEASE OUTBREAK CORRELATION ENGINE (GEOLOCATION + MOCK WEATHER SERVICE) */}
+      <HyperLocalClimateOutbreakCard
+        cropType={cropData.cropType || 'Tomato (Solanum lycopersicum)'}
+        fieldLocation={cropData.location || 'Sector 4 - South Valley Farmland'}
+        cropHealth={cropData}
+        onOpenChatWithPrompt={onOpenChatWithPrompt}
+        onTriggerCautionAlert={(alert) => {
+          setActiveCautionWeatherAlert(alert);
+          onAddNotification?.(alert);
+        }}
+        onWeatherRefreshed={(weather) => setWeatherData(weather)}
+        autoRefreshMinutes={weatherAutoRefreshMinutes}
+        onAutoRefreshMinutesChange={(mins) => setWeatherAutoRefreshMinutes(mins)}
+        externalRefreshTrigger={weatherRefreshTrigger}
+      />
 
       {/* FIELD ALERT QUEUE & BATCH PROCESSING HUB (Notification Fatigue Mitigation) */}
       <div id="batch-processing-hub" className="rounded-2xl bg-white border border-gray-200/90 p-4 sm:p-5 shadow-sm space-y-4">
